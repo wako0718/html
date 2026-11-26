@@ -1,0 +1,3432 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Tactical Arsenal FPS - Online Co-op & PvP</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #111;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      user-select: none;
+    }
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 20px;
+      height: 20px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      transition: transform 0.1s;
+    }
+    #crosshair-h, #crosshair-v {
+      position: absolute;
+      background: #00ffcc;
+    }
+    #crosshair-h { top: 45%; left: 0; width: 100%; height: 10%; }
+    #crosshair-v { top: 0; left: 45%; width: 10%; height: 100%; }
+
+    /* スナイパースコープオーバーレイ */
+    #sniper-scope {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: radial-gradient(circle, transparent 28%, rgba(0, 0, 0, 0.96) 30%);
+      display: none;
+      pointer-events: none;
+      z-index: 4;
+    }
+    #sniper-scope::before, #sniper-scope::after {
+      content: '';
+      position: absolute;
+      background: rgba(255, 70, 85, 0.75);
+    }
+    #sniper-scope::before { top: 50%; left: 0; width: 100%; height: 1px; }
+    #sniper-scope::after { top: 0; left: 50%; width: 1px; height: 100%; }
+
+    /* 左上HUD：スコア・エリア名・味方HPリスト */
+    #hud-top {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #fff;
+      font-size: 20px;
+      font-weight: bold;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+      pointer-events: none;
+    }
+    #callout-badge {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 4px 12px;
+      background: rgba(255, 70, 85, 0.88);
+      color: #fff;
+      font-size: 13px;
+      letter-spacing: 1.5px;
+      border-radius: 3px;
+    }
+    #online-hud-badge {
+      display: none;
+      margin-top: 6px;
+      padding: 4px 10px;
+      background: rgba(14, 165, 233, 0.85);
+      color: #fff;
+      font-size: 12px;
+      border-radius: 3px;
+      letter-spacing: 1px;
+    }
+    #ally-status-list {
+      margin-top: 10px;
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      background: rgba(12, 16, 26, 0.78);
+      padding: 10px 12px;
+      border-radius: 6px;
+      border-left: 3px solid #38bdf8;
+      width: 185px;
+    }
+    .ally-row {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-size: 12px;
+    }
+    .ally-row-header {
+      display: flex;
+      justify-content: space-between;
+      color: #e2e8f0;
+    }
+    .ally-mini-bar-bg {
+      width: 100%;
+      height: 5px;
+      background: #1e293b;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .ally-mini-bar-fill {
+      height: 100%;
+      background: #38bdf8;
+      transition: width 0.15s, background-color 0.2s;
+    }
+
+    /* キルログ・接続通知トースト */
+    #killfeed {
+      position: absolute;
+      top: 75px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+      z-index: 6;
+    }
+    .feed-msg {
+      background: rgba(15, 23, 42, 0.85);
+      border-left: 3px solid #00ffcc;
+      color: #f8fafc;
+      padding: 5px 14px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: bold;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+
+    /* 5v5 チーム生存状況バー */
+    #team-scoreboard {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      align-items: center;
+      gap: 16px;
+      background: rgba(12, 16, 26, 0.85);
+      padding: 8px 22px;
+      border-radius: 6px;
+      border-bottom: 3px solid #ff4655;
+      color: #fff;
+      font-weight: bold;
+      pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    }
+    .team-count-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 20px;
+    }
+    .ally-color { color: #38bdf8; }
+    .enemy-color { color: #ff4655; }
+    .vs-divider { font-size: 14px; color: #94a3b8; }
+
+    /* ミニマップ（味方と自分のみ表示・敵は非表示） */
+    #minimap-container {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 195px;
+      height: 195px;
+      background: rgba(14, 18, 28, 0.88);
+      border: 2px solid #38bdf8;
+      border-radius: 6px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.7);
+      overflow: hidden;
+      pointer-events: none;
+    }
+    #minimap {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #minimap-label {
+      position: absolute;
+      bottom: 4px;
+      right: 6px;
+      font-size: 10px;
+      color: rgba(56, 189, 248, 0.85);
+      letter-spacing: 1px;
+      font-weight: bold;
+    }
+
+    /* 下部HUD */
+    #hud-bottom {
+      position: absolute;
+      bottom: 22px;
+      left: 25px;
+      right: 25px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      pointer-events: none;
+    }
+    .status-box {
+      background: rgba(15, 20, 30, 0.82);
+      padding: 12px 20px;
+      border-left: 4px solid #ff4655;
+      color: #fff;
+      font-size: 20px;
+      font-weight: bold;
+    }
+    #stance-indicator {
+      font-size: 13px;
+      color: #00ffcc;
+      margin-top: 4px;
+      letter-spacing: 1px;
+    }
+    #hp-bar-bg {
+      width: 220px;
+      height: 14px;
+      background: #333;
+      margin-top: 6px;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    #hp-bar {
+      width: 100%;
+      height: 100%;
+      background: #00ffcc;
+      transition: width 0.15s, background-color 0.2s;
+    }
+
+    /* ガジェットHUD */
+    .gadgets-box {
+      display: flex;
+      gap: 12px;
+      background: rgba(15, 20, 30, 0.82);
+      padding: 10px 16px;
+      border-radius: 6px;
+      border-bottom: 3px solid #00ffcc;
+      color: #fff;
+    }
+    .gadget-slot {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 95px;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 4px;
+    }
+    .gadget-key {
+      font-size: 11px;
+      background: #334155;
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: #00ffcc;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    .gadget-name { font-size: 13px; font-weight: bold; }
+    .gadget-status {
+      font-size: 12px;
+      color: #38bdf8;
+      margin-top: 2px;
+      font-weight: bold;
+    }
+
+    #weapon-name-hud {
+      font-size: 13px;
+      color: #ffcc00;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+
+    #action-progress-wrap {
+      position: absolute;
+      top: 58%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 200px;
+      text-align: center;
+      display: none;
+      pointer-events: none;
+    }
+    #action-label {
+      color: #00ffcc;
+      font-size: 14px;
+      font-weight: bold;
+      margin-bottom: 5px;
+      text-shadow: 1px 1px 3px #000;
+    }
+    #action-bar-bg {
+      width: 100%;
+      height: 8px;
+      background: rgba(0,0,0,0.7);
+      border: 1px solid #00ffcc;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    #action-bar-fill {
+      width: 0%;
+      height: 100%;
+      background: #00ffcc;
+    }
+
+    #damage-flash {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      box-shadow: inset 0 0 80px 30px rgba(255, 0, 0, 0.8);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    #heal-flash {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      box-shadow: inset 0 0 70px 25px rgba(0, 255, 170, 0.55);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    #headshot-msg {
+      position: absolute;
+      top: 42%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #ffcc00;
+      font-size: 20px;
+      font-weight: bold;
+      text-shadow: 0 0 8px #ff0000;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    #hitmarker {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 24px;
+      height: 24px;
+      transform: translate(-50%, -50%) rotate(45deg);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.1s;
+    }
+    #hitmarker::before, #hitmarker::after {
+      content: '';
+      position: absolute;
+      background: #ff4655;
+    }
+    #hitmarker::before { top: 11px; left: 0; width: 24px; height: 2px; }
+    #hitmarker::after { top: 0; left: 11px; width: 2px; height: 24px; }
+
+    /* =========================================================
+       スタート・マルチプレイ部屋コード・リザルト画面
+       ========================================================= */
+    #overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: radial-gradient(circle at center, rgba(22, 32, 48, 0.92), rgba(9, 13, 22, 0.97));
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      z-index: 10;
+      overflow-y: auto;
+      padding: 16px 0;
+    }
+
+    #victory-canvas {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 11;
+    }
+
+    .lobby-container {
+      position: relative;
+      z-index: 12;
+      width: 920px;
+      max-width: 95%;
+      background: rgba(18, 24, 38, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-top: 4px solid #ff4655;
+      border-radius: 12px;
+      padding: 22px 28px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85);
+    }
+    .lobby-container.victory-theme {
+      border-top-color: #fbbf24;
+      border-color: rgba(251, 191, 36, 0.5);
+      box-shadow: 0 0 60px rgba(251, 191, 36, 0.35), 0 20px 50px rgba(0, 0, 0, 0.85);
+    }
+
+    .lobby-header {
+      text-align: center;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    #overlay-subtitle {
+      font-size: 11px;
+      letter-spacing: 3px;
+      color: #38bdf8;
+      font-weight: bold;
+      margin-bottom: 2px;
+    }
+    #overlay-title {
+      font-size: 36px;
+      margin: 0;
+      color: #fff;
+      letter-spacing: 3px;
+    }
+    #overlay-title.victory-glow {
+      background: linear-gradient(90deg, #fde047, #f59e0b, #fef08a);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-size: 46px;
+      filter: drop-shadow(0 0 18px rgba(250, 204, 21, 0.6));
+      animation: pulseTitle 1.4s infinite alternate;
+    }
+    @keyframes pulseTitle {
+      from { transform: scale(1); }
+      to { transform: scale(1.04); }
+    }
+
+    #result-banner {
+      display: none;
+      margin: 10px auto 0 auto;
+      padding: 8px 18px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 6px;
+      font-size: 15px;
+      color: #f8fafc;
+      max-width: 540px;
+    }
+
+    .lobby-step {
+      margin-bottom: 15px;
+    }
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: bold;
+      color: #94a3b8;
+      margin-bottom: 8px;
+      letter-spacing: 1px;
+    }
+    .step-badge {
+      background: #ff4655;
+      color: #fff;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    /* マルチプレイ部屋コードパネル */
+    .multiplayer-box {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr 1fr;
+      gap: 12px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    .mp-col {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .mp-col-title {
+      font-size: 12px;
+      font-weight: bold;
+      color: #38bdf8;
+    }
+    .mp-input-row {
+      display: flex;
+      gap: 6px;
+    }
+    .mp-input {
+      flex: 1;
+      background: #1e293b;
+      border: 1px solid #475569;
+      color: #fff;
+      padding: 7px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      outline: none;
+    }
+    .mp-input:focus {
+      border-color: #00ffcc;
+    }
+    .mp-btn {
+      background: #0284c7;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .mp-btn:hover { background: #0369a1; }
+    .mp-btn-green { background: #059669; }
+    .mp-btn-green:hover { background: #047857; }
+
+    .room-code-display {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0f172a;
+      border: 1px dashed #38bdf8;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 15px;
+      color: #00ffcc;
+      font-weight: bold;
+    }
+    .team-toggle-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .team-pill {
+      padding: 7px 6px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+      background: #1e293b;
+      border: 1px solid #475569;
+      color: #cbd5e1;
+    }
+    .team-pill.active-ally {
+      background: rgba(2, 132, 199, 0.28);
+      border-color: #38bdf8;
+      color: #38bdf8;
+    }
+    .team-pill.active-enemy {
+      background: rgba(225, 29, 72, 0.28);
+      border-color: #ff4655;
+      color: #ff4655;
+    }
+    #mp-status-text {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+
+    /* モード選択カード */
+    .mode-selector {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .mode-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: rgba(30, 41, 59, 0.75);
+      border: 2px solid #334155;
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s;
+    }
+    .mode-card:hover { border-color: #64748b; }
+    .mode-card.active {
+      border-color: #00ffcc;
+      background: rgba(0, 255, 204, 0.1);
+    }
+    .mode-icon { font-size: 24px; }
+    .mode-card-title { font-size: 15px; font-weight: bold; color: #fff; }
+    .mode-card.active .mode-card-title { color: #00ffcc; }
+    .mode-card-desc { font-size: 11px; color: #cbd5e1; }
+
+    /* 5種類の武器選択カード */
+    .weapon-selector {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+    .weapon-card {
+      padding: 9px 6px;
+      background: rgba(30, 41, 59, 0.75);
+      border: 2px solid #334155;
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .weapon-card:hover { border-color: #64748b; }
+    .weapon-card.active {
+      border-color: #fbbf24;
+      background: rgba(251, 191, 36, 0.12);
+    }
+    .weapon-icon { font-size: 19px; margin-bottom: 2px; }
+    .weapon-card-title { font-size: 12px; font-weight: bold; color: #fff; margin-bottom: 4px; }
+    .weapon-card.active .weapon-card-title { color: #fbbf24; }
+    .weapon-card-stats { font-size: 10px; color: #94a3b8; line-height: 1.3; }
+    .weapon-card.active .weapon-card-stats { color: #e2e8f0; }
+
+    .controls-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: rgba(15, 23, 42, 0.7);
+      border-radius: 6px;
+      margin-bottom: 16px;
+      font-size: 11px;
+      color: #cbd5e1;
+    }
+    .key-tag {
+      background: #334155;
+      color: #00ffcc;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-weight: bold;
+      margin-right: 3px;
+    }
+
+    .menu-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+    }
+    .btn {
+      padding: 12px 32px;
+      font-size: 16px;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: transform 0.1s, background-color 0.2s;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-primary {
+      background-color: #ff4655;
+      color: #fff;
+      box-shadow: 0 4px 15px rgba(255, 70, 85, 0.4);
+    }
+    .btn-primary:hover { background-color: #ff5e6c; }
+    .btn-secondary {
+      background-color: #1e293b;
+      color: #fff;
+      border: 1px solid #475569;
+    }
+    .btn-secondary:hover { background-color: #334155; }
+
+    /* FPS設定モーダル */
+    #settings-modal {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.78);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 20;
+    }
+    .settings-panel {
+      background: #1b1d2e;
+      border: 1px solid #ff4655;
+      border-radius: 8px;
+      width: 440px;
+      max-width: 90%;
+      padding: 28px;
+      color: #fff;
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.8);
+    }
+    .settings-panel h2 {
+      margin-top: 0;
+      margin-bottom: 20px;
+      color: #ff4655;
+      font-size: 24px;
+      border-bottom: 1px solid #333652;
+      padding-bottom: 10px;
+    }
+    .setting-row { margin-bottom: 18px; }
+    .setting-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-size: 15px;
+      color: #e0e0e0;
+    }
+    .setting-val { color: #00ffcc; font-weight: bold; }
+    input[type="range"] { width: 100%; accent-color: #ff4655; cursor: pointer; }
+    .setting-inline { display: flex; justify-content: space-between; align-items: center; }
+    select, input[type="checkbox"] { cursor: pointer; }
+    select {
+      background: #2b2d42;
+      color: #fff;
+      border: 1px solid #5c6080;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    input[type="checkbox"] { width: 20px; height: 20px; accent-color: #ff4655; }
+    .settings-footer {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 24px;
+      padding-top: 14px;
+      border-top: 1px solid #333652;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="damage-flash"></div>
+  <div id="heal-flash"></div>
+  <div id="sniper-scope"></div>
+
+  <!-- 左上HUD -->
+  <div id="hud-top">
+    <div>SCORE: <span id="score">0</span> &nbsp;|&nbsp; KILLS: <span id="kills">0</span><span id="solo-goal-text"> / 10</span></div>
+    <div id="callout-badge">MID TOWER</div>
+    <div id="online-hud-badge">🌐 ONLINE ROOM: <span id="hud-room-code"></span> (<span id="hud-peer-count">1</span>人)</div>
+    <!-- 味方HP一覧リスト -->
+    <div id="ally-status-list"></div>
+  </div>
+
+  <!-- オンライン接続・キルログ通知 -->
+  <div id="killfeed"></div>
+
+  <!-- 5v5 チーム生存カウンター -->
+  <div id="team-scoreboard">
+    <div class="team-count-box ally-color">
+      <span>ALLY</span>
+      <span id="ally-alive">5</span>
+    </div>
+    <div class="vs-divider">VS</div>
+    <div class="team-count-box enemy-color">
+      <span id="enemy-alive">5</span>
+      <span>ENEMY</span>
+    </div>
+  </div>
+
+  <!-- ミニマップ（味方と自分のみ表示・敵は非表示） -->
+  <div id="minimap-container">
+    <canvas id="minimap" width="195" height="195"></canvas>
+    <div id="minimap-label">ALLY RADAR</div>
+  </div>
+
+  <div id="crosshair">
+    <div id="crosshair-h"></div>
+    <div id="crosshair-v"></div>
+  </div>
+  <div id="hitmarker"></div>
+  <div id="headshot-msg">HEADSHOT!</div>
+
+  <!-- 回復進行バー -->
+  <div id="action-progress-wrap">
+    <div id="action-label">救急キット使用中...</div>
+    <div id="action-bar-bg"><div id="action-bar-fill"></div></div>
+  </div>
+
+  <!-- 下部HUD -->
+  <div id="hud-bottom">
+    <div class="status-box">
+      HP: <span id="hp-text">100</span> / 100
+      <div id="hp-bar-bg"><div id="hp-bar"></div></div>
+      <div id="stance-indicator">STANCE: STANDING</div>
+    </div>
+
+    <div class="gadgets-box">
+      <div class="gadget-slot">
+        <span class="gadget-key">[H] キー</span>
+        <span class="gadget-name">🩺 救急キット</span>
+        <span class="gadget-status" id="medkit-status">∞ 使用可能</span>
+      </div>
+      <div class="gadget-slot">
+        <span class="gadget-key">[G] キー</span>
+        <span class="gadget-name">💣 グレネード</span>
+        <span class="gadget-status" id="grenade-status">残り 2 / 2</span>
+      </div>
+    </div>
+
+    <div class="status-box" style="border-left: none; border-right: 4px solid #ff4655; text-align: right;">
+      <div id="weapon-name-hud">ASSAULT RIFLE</div>
+      AMMO: <span id="ammo">30</span> / <span id="max-ammo">30</span>
+    </div>
+  </div>
+
+  <!-- スタート／オンラインロビー／リザルト画面 -->
+  <div id="overlay">
+    <canvas id="victory-canvas"></canvas>
+
+    <div class="lobby-container" id="lobby-box">
+      <div class="lobby-header">
+        <div id="overlay-subtitle">ONLINE CO-OP & PVP ARENA</div>
+        <h1 id="overlay-title">TACTICAL ARSENAL</h1>
+        <div id="result-banner"></div>
+      </div>
+
+      <!-- STEP 1: オンライン部屋コード（共闘・対戦） -->
+      <div class="lobby-step">
+        <div class="step-header"><span class="step-badge" style="background:#0284c7;">ONLINE</span> 部屋コードで友達と共闘・対戦（任意）</div>
+        <div class="multiplayer-box">
+          <!-- 左：部屋を作る（コード発行） -->
+          <div class="mp-col">
+            <div class="mp-col-title">① 部屋を作る（コード発行）</div>
+            <div class="room-code-display">
+              <span id="my-room-code">未発行</span>
+              <div>
+                <button id="btn-create-room" class="mp-btn">発行</button>
+                <button id="btn-copy-room" class="mp-btn mp-btn-green" style="display:none;">コピー</button>
+              </div>
+            </div>
+            <div id="mp-status-text">ソロ・オフラインでもそのまま出撃可能です</div>
+          </div>
+
+          <!-- 中央：部屋に参加（コード入力） -->
+          <div class="mp-col">
+            <div class="mp-col-title">② 部屋コードを入力して参加</div>
+            <div class="mp-input-row">
+              <input type="text" id="input-join-code" class="mp-input" placeholder="例: ARENA-XXXXX">
+              <button id="btn-join-room" class="mp-btn mp-btn-green">参加</button>
+            </div>
+            <div class="mp-input-row">
+              <input type="text" id="input-player-name" class="mp-input" placeholder="プレイヤー名" maxlength="12" style="font-size:12px;">
+            </div>
+          </div>
+
+          <!-- 右：共闘か対戦か（陣営選択） -->
+          <div class="mp-col">
+            <div class="mp-col-title">③ 自分の陣営（共闘 / 対戦）</div>
+            <div class="team-toggle-group">
+              <div class="team-pill active-ally" id="pill-ally" data-team="ally">🔵 味方（共闘）</div>
+              <div class="team-pill" id="pill-enemy" data-team="enemy">🔴 敵（対戦）</div>
+            </div>
+            <div style="font-size:10px; color:#94a3b8; line-height:1.3;">
+              同じ陣営なら味方として共闘、違う陣営なら敵として対戦します
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2: ゲームモード選択 -->
+      <div class="lobby-step">
+        <div class="step-header"><span class="step-badge">MODE</span> ゲームモードを選択</div>
+        <div class="mode-selector">
+          <div class="mode-card active" id="mode-solo" data-mode="solo">
+            <div class="mode-icon">👤</div>
+            <div>
+              <div class="mode-card-title">ソロ / 協力サバイバル（10キル制覇）</div>
+              <div class="mode-card-desc">CPU兵士を10体撃破でクリア（オンライン仲間と共闘・対戦可能）</div>
+            </div>
+          </div>
+          <div class="mode-card" id="mode-5v5" data-mode="5v5">
+            <div class="mode-icon">👥</div>
+            <div>
+              <div class="mode-card-title">5 vs 5 チーム戦</div>
+              <div class="mode-card-desc">味方チーム vs 敵チームの殲滅戦（全キャラクターHP100統一）</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 3: メイン武器選択 -->
+      <div class="lobby-step">
+        <div class="step-header"><span class="step-badge">WEAPON</span> メイン武器を選択</div>
+        <div class="weapon-selector">
+          <div class="weapon-card" data-weapon="handgun">
+            <div class="weapon-icon">🔫</div>
+            <div class="weapon-card-title">ハンドガン</div>
+            <div class="weapon-card-stats">15発 / 単発<br>威力35 (頭100)<br>移動速度UP</div>
+          </div>
+          <div class="weapon-card" data-weapon="shotgun">
+            <div class="weapon-icon">💥</div>
+            <div class="weapon-card-title">ショットガン</div>
+            <div class="weapon-card-stats">8発 / 散弾8粒<br>近距離一撃必殺<br>威力22×8</div>
+          </div>
+          <div class="weapon-card" data-weapon="sniper">
+            <div class="weapon-icon">🎯</div>
+            <div class="weapon-card-title">スナイパー</div>
+            <div class="weapon-card-stats">5発 / 右クリ倍率<br>胴体一撃 (100)<br>超高精度</div>
+          </div>
+          <div class="weapon-card active" data-weapon="assault">
+            <div class="weapon-icon">🪖</div>
+            <div class="weapon-card-title">アサルト</div>
+            <div class="weapon-card-stats">30発 / フルオート<br>威力34 (頭100)<br>万能バランス</div>
+          </div>
+          <div class="weapon-card" data-weapon="machinegun">
+            <div class="weapon-icon">🔥</div>
+            <div class="weapon-card-title">マシンガン</div>
+            <div class="weapon-card-stats">100発 / 超連射<br>威力25 (頭65)<br>弾幕制圧</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 操作キー一覧 -->
+      <div class="controls-bar">
+        <span><span class="key-tag">WASD</span>移動</span>
+        <span><span class="key-tag">SPACE</span>ジャンプ</span>
+        <span><span class="key-tag">C / Shift</span>しゃがみ</span>
+        <span><span class="key-tag">左クリック</span>射撃</span>
+        <span><span class="key-tag">右クリック</span>スコープ(SR)</span>
+        <span><span class="key-tag">R</span>リロード</span>
+        <span><span class="key-tag">H</span>救急キット(∞)</span>
+        <span><span class="key-tag">G</span>グレネード(2個)</span>
+      </div>
+
+      <div class="menu-buttons">
+        <button id="btn-play" class="btn btn-primary">▶ 出撃する</button>
+        <button id="btn-open-settings" class="btn btn-secondary">⚙ エイム・画面設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FPS設定メニューモーダル -->
+  <div id="settings-modal">
+    <div class="settings-panel">
+      <h2>⚙ FPS 設定</h2>
+
+      <div class="setting-row">
+        <div class="setting-header">
+          <span>エイム感度（マウス感度）</span>
+          <span id="val-sens" class="setting-val">2.0</span>
+        </div>
+        <input type="range" id="opt-sens" min="0.2" max="8.0" step="0.1" value="2.0">
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-header">
+          <span>視野角 (FOV)</span>
+          <span id="val-fov" class="setting-val">75°</span>
+        </div>
+        <input type="range" id="opt-fov" min="60" max="110" step="1" value="75">
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-header">
+          <span>クロスヘア サイズ</span>
+          <span id="val-ch-size" class="setting-val">20px</span>
+        </div>
+        <input type="range" id="opt-ch-size" min="10" max="40" step="2" value="20">
+      </div>
+
+      <div class="setting-row setting-inline">
+        <span>クロスヘア カラー</span>
+        <select id="opt-ch-color">
+          <option value="#00ffcc">シアン (#00ffcc)</option>
+          <option value="#00ff44">ネオングリーン</option>
+          <option value="#ff3366">レッド</option>
+          <option value="#ffcc00">イエロー</option>
+          <option value="#ffffff">ホワイト</option>
+        </select>
+      </div>
+
+      <div class="setting-row setting-inline">
+        <span>Y軸（上下視点）反転</span>
+        <input type="checkbox" id="opt-invert-y">
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-header">
+          <span>効果音ボリューム</span>
+          <span id="val-vol" class="setting-val">100%</span>
+        </div>
+        <input type="range" id="opt-vol" min="0" max="1" step="0.05" value="1.0">
+      </div>
+
+      <div class="settings-footer">
+        <button id="btn-reset-settings" class="btn btn-secondary" style="padding: 10px 18px; font-size: 14px;">初期値に戻す</button>
+        <button id="btn-close-settings" class="btn btn-primary" style="padding: 10px 26px; font-size: 15px;">完了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Three.js & PeerJS (WebRTC P2Pマルチプレイライブラリ) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+  <script>
+    // =========================================================================
+    // 5種類の武器データ定義
+    // =========================================================================
+    const WEAPONS = {
+      handgun: {
+        name: 'HANDGUN',
+        magSize: 15,
+        fireRate: 0.16,
+        auto: false,
+        damage: 35,
+        headDamage: 100,
+        pellets: 1,
+        spread: 0.008,
+        reloadTime: 1100,
+        speedMult: 1.12,
+        recoilKick: 0.022,
+        gunScale: [0.09, 0.12, 0.35],
+        gunColor: 0x64748b,
+        pitch: [320, 80]
+      },
+      shotgun: {
+        name: 'SHOTGUN',
+        magSize: 8,
+        fireRate: 0.72,
+        auto: false,
+        damage: 22,
+        headDamage: 44,
+        pellets: 8,
+        spread: 0.075,
+        reloadTime: 1600,
+        speedMult: 1.0,
+        recoilKick: 0.065,
+        gunScale: [0.14, 0.16, 0.75],
+        gunColor: 0x3f3f46,
+        pitch: [140, 25]
+      },
+      sniper: {
+        name: 'SNIPER RIFLE',
+        magSize: 5,
+        fireRate: 1.05,
+        auto: false,
+        damage: 100,
+        headDamage: 250,
+        pellets: 1,
+        spread: 0.001,
+        reloadTime: 1900,
+        speedMult: 0.92,
+        recoilKick: 0.075,
+        gunScale: [0.11, 0.15, 0.95],
+        gunColor: 0x1e3a2f,
+        pitch: [180, 20]
+      },
+      assault: {
+        name: 'ASSAULT RIFLE',
+        magSize: 30,
+        fireRate: 0.11,
+        auto: true,
+        damage: 34,
+        headDamage: 100,
+        pellets: 1,
+        spread: 0.015,
+        reloadTime: 1300,
+        speedMult: 1.0,
+        recoilKick: 0.024,
+        gunScale: [0.12, 0.15, 0.65],
+        gunColor: 0x222222,
+        pitch: [210, 40]
+      },
+      machinegun: {
+        name: 'MACHINE GUN',
+        magSize: 100,
+        fireRate: 0.075,
+        auto: true,
+        damage: 25,
+        headDamage: 65,
+        pellets: 1,
+        spread: 0.032,
+        reloadTime: 2400,
+        speedMult: 0.86,
+        recoilKick: 0.026,
+        gunScale: [0.18, 0.2, 0.8],
+        gunColor: 0x292524,
+        pitch: [170, 35]
+      }
+    };
+
+    // --- FPS設定管理 ---
+    const defaultSettings = {
+      sensitivity: 2.0,
+      fov: 75,
+      crosshairSize: 20,
+      crosshairColor: '#00ffcc',
+      invertY: false,
+      volume: 1.0
+    };
+
+    let settings = { ...defaultSettings };
+    try {
+      const saved = localStorage.getItem('fps_game_settings');
+      if (saved) settings = { ...defaultSettings, ...JSON.parse(saved) };
+    } catch (e) {}
+
+    let selectedMode = 'solo';
+    let activeGameMode = 'solo';
+    let selectedWeaponKey = 'assault';
+    let currentWeapon = WEAPONS.assault;
+
+    // --- プレイヤー名初期値 ---
+    const defaultPlayerName = 'Player-' + Math.floor(100 + Math.random() * 900);
+    document.getElementById('input-player-name').value = defaultPlayerName;
+
+    // --- 基本セットアップ ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87a8c4);
+    scene.fog = new THREE.Fog(0x87a8c4, 40, 145);
+
+    const camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.rotation.order = 'YXZ';
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    function applySettings() {
+      if (!player.isScoped) {
+        camera.fov = settings.fov;
+        camera.updateProjectionMatrix();
+      }
+
+      const ch = document.getElementById('crosshair');
+      ch.style.width = settings.crosshairSize + 'px';
+      ch.style.height = settings.crosshairSize + 'px';
+      document.getElementById('crosshair-h').style.background = settings.crosshairColor;
+      document.getElementById('crosshair-v').style.background = settings.crosshairColor;
+
+      document.getElementById('opt-sens').value = settings.sensitivity;
+      document.getElementById('val-sens').textContent = Number(settings.sensitivity).toFixed(1);
+
+      document.getElementById('opt-fov').value = settings.fov;
+      document.getElementById('val-fov').textContent = settings.fov + '°';
+
+      document.getElementById('opt-ch-size').value = settings.crosshairSize;
+      document.getElementById('val-ch-size').textContent = settings.crosshairSize + 'px';
+
+      document.getElementById('opt-ch-color').value = settings.crosshairColor;
+      document.getElementById('opt-invert-y').checked = settings.invertY;
+
+      document.getElementById('opt-vol').value = settings.volume;
+      document.getElementById('val-vol').textContent = Math.round(settings.volume * 100) + '%';
+
+      try {
+        localStorage.setItem('fps_game_settings', JSON.stringify(settings));
+      } catch (e) {}
+    }
+
+    // --- ライティング ---
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xfff5e4, 0.95);
+    dirLight.position.set(35, 65, 25);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    // --- 床面 ---
+    const floorGeo = new THREE.PlaneGeometry(100, 100);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0xc2b8a3, roughness: 0.85 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const gridHelper = new THREE.GridHelper(100, 50, 0x9e9480, 0xb2a894);
+    gridHelper.position.y = 0.01;
+    scene.add(gridHelper);
+
+    // =========================================================================
+    // VALORANT風 マップ建築 ＋ 高層ビル・タワー構造
+    // =========================================================================
+    const colliders = [];
+    const worldMeshes = [];
+
+    const matWallSand   = new THREE.MeshStandardMaterial({ color: 0xd9cfc1, roughness: 0.8 });
+    const matBuilding   = new THREE.MeshStandardMaterial({ color: 0x5c677d, roughness: 0.75 });
+    const matTower      = new THREE.MeshStandardMaterial({ color: 0x415a77, roughness: 0.65, metalness: 0.2 });
+    const matSkyscraper = new THREE.MeshStandardMaterial({ color: 0x2b3a4a, roughness: 0.5, metalness: 0.35 });
+    const matWindowGlow = new THREE.MeshBasicMaterial({ color: 0x8ecae6 });
+    const matRoof       = new THREE.MeshStandardMaterial({ color: 0x33415c, roughness: 0.7 });
+    const matHeaven     = new THREE.MeshStandardMaterial({ color: 0x7d8597, roughness: 0.65 });
+    const matRadianite  = new THREE.MeshStandardMaterial({ color: 0x1b4332, roughness: 0.4, metalness: 0.3 });
+    const matWoodCrate  = new THREE.MeshStandardMaterial({ color: 0xb07d4f, roughness: 0.8 });
+    const matAccentRed  = new THREE.MeshStandardMaterial({ color: 0xff4655, roughness: 0.5 });
+
+    function addBox(x, y, z, w, h, d, material, customMinimapColor = null) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+      mesh.position.set(x, y + h / 2, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+      worldMeshes.push(mesh);
+
+      colliders.push({
+        minX: x - w / 2,
+        maxX: x + w / 2,
+        minZ: z - d / 2,
+        maxZ: z + d / 2,
+        minY: y,
+        maxY: y + h,
+        isRamp: false,
+        mapColor: customMinimapColor
+      });
+      return mesh;
+    }
+
+    function addBackgroundTower(x, z, w, h, d) {
+      const tower = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), matSkyscraper);
+      tower.position.set(x, h / 2, z);
+      scene.add(tower);
+
+      for (let wy = 4; wy < h - 2; wy += 4.5) {
+        const winBand = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, 0.6, d + 0.2), matWindowGlow);
+        winBand.position.set(x, wy, z);
+        scene.add(winBand);
+      }
+    }
+
+    function addRamp(x, y, z, w, h, d, axis, dir, material) {
+      const steps = 12;
+      for (let i = 0; i < steps; i++) {
+        const t = (i + 1) / steps;
+        const stepH = h * t;
+        let sx = x, sz = z, sw = w, sd = d;
+        if (axis === 'z') {
+          sd = d / steps;
+          sz = (z - d / 2) + sd * (i + 0.5);
+          if (dir < 0) sz = (z + d / 2) - sd * (i + 0.5);
+        } else {
+          sw = w / steps;
+          sx = (x - w / 2) + sw * (i + 0.5);
+          if (dir < 0) sx = (x + w / 2) - sw * (i + 0.5);
+        }
+        const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(sw, stepH, sd), material);
+        stepMesh.position.set(sx, y + stepH / 2, sz);
+        stepMesh.castShadow = true;
+        stepMesh.receiveShadow = true;
+        scene.add(stepMesh);
+        worldMeshes.push(stepMesh);
+      }
+
+      colliders.push({
+        minX: x - w / 2,
+        maxX: x + w / 2,
+        minZ: z - d / 2,
+        maxZ: z + d / 2,
+        minY: y,
+        maxY: y + h,
+        isRamp: true,
+        rampAxis: axis,
+        rampDir: dir,
+        mapColor: '#9aa5b1'
+      });
+    }
+
+    function buildValorantStyleMap() {
+      addBox(0, 0, -50, 102, 7.5, 2, matWallSand, '#4a5568');
+      addBox(0, 0,  50, 102, 7.5, 2, matWallSand, '#4a5568');
+      addBox(-50, 0, 0, 2, 7.5, 100, matWallSand, '#4a5568');
+      addBox( 50, 0, 0, 2, 7.5, 100, matWallSand, '#4a5568');
+
+      addBackgroundTower(-62, -45, 16, 26, 16);
+      addBackgroundTower(-64,  10, 18, 20, 22);
+      addBackgroundTower( 62, -15, 18, 28, 18);
+      addBackgroundTower( 60,  42, 16, 22, 16);
+      addBackgroundTower(-25, -64, 22, 24, 16);
+      addBackgroundTower( 28, -62, 18, 30, 18);
+      addBackgroundTower(  0,  64, 24, 19, 16);
+
+      // MID 高層タワー
+      addBox(0, 0, 0, 5.2, 14.0, 5.2, matTower, '#718096');
+      addBox(0, 5.2, 0, 5.8, 0.6, 5.8, matBuilding);
+      addBox(0, 10.5, 0, 5.6, 0.5, 5.6, matAccentRed);
+      addBox(0, 14.0, 0, 3.6, 3.5, 3.6, matSkyscraper);
+
+      addBox(-7.0, 0,  5.5, 1.8, 1.3, 1.8, matWoodCrate, '#b07d4f');
+      addBox( 7.0, 0, -5.5, 1.8, 1.3, 1.8, matWoodCrate, '#b07d4f');
+
+      // 西側：Aサイト ＆ 大型建物
+      addBox(-15, 0, -24, 2.5, 9.5, 22, matBuilding, '#4a5568');
+      addBox(-15, 0,  18, 2.5, 9.5, 24, matBuilding, '#4a5568');
+
+      addBox(-32, 0, 12, 32, 9.5, 2.0, matBuilding, '#4a5568');
+      addBox(-24, 0, 28, 2.0, 5.2, 18, matBuilding, '#4a5568');
+      addBox(-32, 4.8, 30, 34, 0.6, 36, matRoof, null);
+      addBox(-35, 5.4, 33, 24, 5.6, 26, matTower, null);
+
+      addBox(-38, 0, 22, 2.4, 2.2, 2.4, matRadianite, '#2f855a');
+      addBox(-29, 0, 38, 3.0, 1.35, 1.6, matWoodCrate, '#b07d4f');
+
+      addBox(-35, 0, -40, 26, 2.6, 14, matHeaven, '#a0aec0');
+      addBox(-42, 2.6, -33.2, 10, 0.95, 0.5, matBuilding);
+      addBox(-26, 2.6, -33.2, 8,  0.95, 0.5, matBuilding);
+      addRamp(-18.5, 0, -40, 7.0, 2.6, 5.5, 'x', -1, matHeaven);
+      addBox(-43, 2.6, -44, 8, 12.5, 6, matTower, '#4a5568');
+
+      addBox(-31, 0, -18, 2.6, 2.6, 2.6, matRadianite, '#2f855a');
+      addBox(-28.4, 0, -18, 2.2, 1.35, 2.2, matRadianite, '#2f855a');
+      addBox(-41, 0, -14, 3.2, 1.35, 1.6, matWoodCrate, '#b07d4f');
+
+      // 東側：Bサイト ＆ マーケット建物
+      addBox(15, 0, -18, 2.5, 9.5, 24, matBuilding, '#4a5568');
+      addBox(15, 0,  24, 2.5, 9.5, 22, matBuilding, '#4a5568');
+
+      addBox(32, 0, -12, 32, 9.5, 2.0, matBuilding, '#4a5568');
+      addBox(26, 0, -28, 2.0, 5.2, 18, matBuilding, '#4a5568');
+      addBox(32, 4.8, -30, 34, 0.6, 36, matRoof, null);
+      addBox(35, 5.4, -33, 24, 6.2, 26, matTower, null);
+
+      addBox(39, 0, -22, 2.4, 2.2, 2.4, matRadianite, '#2f855a');
+      addBox(31, 0, -39, 3.2, 1.35, 1.6, matWoodCrate, '#b07d4f');
+
+      addBox(35, 0, 40, 26, 2.6, 14, matHeaven, '#a0aec0');
+      addBox(42, 2.6, 33.2, 10, 0.95, 0.5, matBuilding);
+      addBox(26, 2.6, 33.2, 8,  0.95, 0.5, matBuilding);
+      addRamp(18.5, 0, 40, 7.0, 2.6, 5.5, 'x', +1, matHeaven);
+      addBox(43, 2.6, 44, 8, 12.5, 6, matTower, '#4a5568');
+
+      addBox(32, 0, 18, 5.5, 2.8, 2.6, matBuilding, '#4a5568');
+      addBox(27.5, 0, 18, 2.2, 1.35, 2.2, matWoodCrate, '#b07d4f');
+      addBox(41, 0, 14, 2.4, 2.4, 2.4, matRadianite, '#2f855a');
+    }
+    buildValorantStyleMap();
+
+    // =========================================================================
+    // 3D立体コリジョン判定
+    // =========================================================================
+    function getFloorHeightAt(x, z, currentFeetY) {
+      let highestFloor = 0;
+
+      for (const c of colliders) {
+        if (x >= c.minX - 0.3 && x <= c.maxX + 0.3 &&
+            z >= c.minZ - 0.3 && z <= c.maxZ + 0.3) {
+          let surfaceY = c.maxY;
+
+          if (c.isRamp) {
+            let ratio = 0;
+            if (c.rampAxis === 'x') {
+              ratio = (x - c.minX) / (c.maxX - c.minX);
+              if (c.rampDir < 0) ratio = 1 - ratio;
+            } else {
+              ratio = (z - c.minZ) / (c.maxZ - c.minZ);
+              if (c.rampDir < 0) ratio = 1 - ratio;
+            }
+            ratio = Math.max(0, Math.min(1, ratio));
+            surfaceY = c.minY + (c.maxY - c.minY) * ratio;
+          }
+
+          if (surfaceY <= currentFeetY + 0.65 && surfaceY > highestFloor) {
+            highestFloor = surfaceY;
+          }
+        }
+      }
+      return highestFloor;
+    }
+
+    function resolve3DCollision(pos, feetY, bodyHeight, radius) {
+      const headY = feetY + bodyHeight;
+
+      for (const c of colliders) {
+        if (c.isRamp) continue;
+
+        if (headY > c.minY + 0.05 && feetY < c.maxY - 0.55) {
+          const centerX = (c.minX + c.maxX) / 2;
+          const centerZ = (c.minZ + c.maxZ) / 2;
+          const halfW = (c.maxX - c.minX) / 2;
+          const halfD = (c.maxZ - c.minZ) / 2;
+
+          const dx = pos.x - centerX;
+          const dz = pos.z - centerZ;
+          const minDistX = halfW + radius;
+          const minDistZ = halfD + radius;
+
+          if (Math.abs(dx) < minDistX && Math.abs(dz) < minDistZ) {
+            const overlapX = minDistX - Math.abs(dx);
+            const overlapZ = minDistZ - Math.abs(dz);
+            if (overlapX < overlapZ) {
+              pos.x += dx > 0 ? overlapX : -overlapX;
+            } else {
+              pos.z += dz > 0 ? overlapZ : -overlapZ;
+            }
+          }
+        }
+      }
+    }
+
+    function getCalloutName(x, z, feetY) {
+      if (feetY > 2.0) {
+        return x < 0 ? 'A HEAVEN (高台)' : 'B HEAVEN (高台)';
+      }
+      if (x < -15 && z < -10) return 'A SITE';
+      if (x < -15 && z >= 12) return 'A MAIN (屋内)';
+      if (x > 15 && z > 10)   return 'B SITE';
+      if (x > 15 && z <= -12) return 'B MARKET (屋内)';
+      return 'MID TOWER';
+    }
+
+    // --- プレイヤーの銃モデル ---
+    const gunGroup = new THREE.Group();
+    const gunMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.3, metalness: 0.8 });
+    const gunMesh = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.15, 0.65), gunMat);
+    gunMesh.position.set(0.25, -0.22, -0.42);
+    gunGroup.add(gunMesh);
+
+    const muzzlePoint = new THREE.Object3D();
+    muzzlePoint.position.set(0.25, -0.18, -0.78);
+    gunGroup.add(muzzlePoint);
+
+    const muzzleLight = new THREE.PointLight(0xffaa00, 0, 5);
+    muzzleLight.position.set(0.25, -0.15, -0.85);
+    gunGroup.add(muzzleLight);
+    camera.add(gunGroup);
+    scene.add(camera);
+
+    function equipWeaponAppearance() {
+      currentWeapon = WEAPONS[selectedWeaponKey];
+      gunMesh.scale.set(
+        currentWeapon.gunScale[0] / 0.12,
+        currentWeapon.gunScale[1] / 0.15,
+        currentWeapon.gunScale[2] / 0.65
+      );
+      gunMat.color.setHex(currentWeapon.gunColor);
+      document.getElementById('weapon-name-hud').textContent = currentWeapon.name;
+      document.getElementById('max-ammo').textContent = currentWeapon.magSize;
+    }
+
+    // --- 弾丸トレーサー＆スパーク＆爆発エフェクト ---
+    const tracerBullets = [];
+    const hitSparks = [];
+    const activeGrenades = [];
+    const explosionEffects = [];
+
+    const pBulletGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.85, 6);
+    pBulletGeo.rotateX(Math.PI / 2);
+    const pBulletMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+    const allyBulletMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    const enemyRemoteBulletMat = new THREE.MeshBasicMaterial({ color: 0xff3366 });
+
+    const sparkGeo = new THREE.SphereGeometry(0.05, 6, 6);
+    const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffdd44 });
+
+    function spawnTracerBullet(startPos, targetPoint, colorType = 'player') {
+      const mat = colorType === 'player' ? pBulletMat : (colorType === 'ally' ? allyBulletMat : enemyRemoteBulletMat);
+      const bullet = new THREE.Mesh(pBulletGeo, mat);
+      bullet.position.copy(startPos);
+      bullet.lookAt(targetPoint);
+
+      const dir = new THREE.Vector3().subVectors(targetPoint, startPos).normalize();
+      const totalDist = startPos.distanceTo(targetPoint);
+
+      bullet.userData = {
+        velocity: dir.multiplyScalar(3.5),
+        remainingDist: totalDist
+      };
+
+      scene.add(bullet);
+      tracerBullets.push(bullet);
+    }
+
+    function spawnHitSpark(pos, isCharacter) {
+      const spark = new THREE.Mesh(
+        sparkGeo,
+        isCharacter ? new THREE.MeshBasicMaterial({ color: 0xff3366 }) : sparkMat
+      );
+      spark.position.copy(pos);
+      spark.userData = { life: 8 };
+      scene.add(spark);
+      hitSparks.push(spark);
+    }
+
+    function pushKillfeedMessage(text, borderColor = '#00ffcc') {
+      const feed = document.getElementById('killfeed');
+      const div = document.createElement('div');
+      div.className = 'feed-msg';
+      div.style.borderLeftColor = borderColor;
+      div.textContent = text;
+      feed.appendChild(div);
+      setTimeout(() => {
+        if (div.parentNode) div.parentNode.removeChild(div);
+      }, 3800);
+    }
+
+    // =========================================================================
+    // グレネード投擲＆物理・爆発システム
+    // =========================================================================
+    const grenadeGeo = new THREE.SphereGeometry(0.11, 10, 10);
+    const grenadeMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, metalness: 0.6, roughness: 0.3 });
+
+    function throwGrenade(customStart = null, customVel = null, isRemote = false) {
+      if (!isRemote) {
+        if (player.grenades <= 0 || player.isHealing || isRoundEnded) return;
+        player.grenades--;
+        updateHUD();
+        playTone(280, 420, 'sine', 0.14, 0.25);
+      }
+
+      const gren = new THREE.Mesh(grenadeGeo, grenadeMat);
+      let startPos, vel;
+
+      if (customStart && customVel) {
+        startPos = customStart.clone();
+        vel = customVel.clone();
+      } else {
+        startPos = camera.position.clone();
+        const dir = new THREE.Vector3();
+        camera.getWorldDirection(dir);
+        startPos.addScaledVector(dir, 0.6);
+        startPos.y -= 0.15;
+        vel = dir.multiplyScalar(0.55);
+        vel.y += 0.16;
+
+        // オンラインの仲間・敵にもグレネード投擲を同期
+        broadcastNetMessage({
+          type: 'grenade',
+          pos: [startPos.x, startPos.y, startPos.z],
+          vel: [vel.x, vel.y, vel.z]
+        });
+      }
+
+      gren.position.copy(startPos);
+      gren.userData = {
+        velocity: vel,
+        fuse: 2.2,
+        isRemote
+      };
+
+      scene.add(gren);
+      activeGrenades.push(gren);
+    }
+
+    function detonateGrenade(pos, isRemote = false) {
+      playTone(95, 18, 'sawtooth', 0.55, 0.6);
+
+      const expGeo = new THREE.SphereGeometry(1.0, 16, 16);
+      const expMat = new THREE.MeshBasicMaterial({
+        color: 0xff6b00,
+        transparent: true,
+        opacity: 0.85
+      });
+      const expMesh = new THREE.Mesh(expGeo, expMat);
+      expMesh.position.copy(pos);
+      expMesh.userData = { life: 18 };
+      scene.add(expMesh);
+      explosionEffects.push(expMesh);
+
+      const blastRadius = 8.5;
+      // 自分が投げたグレネードなら敵ボットと敵プレイヤーにダメージ計算
+      if (!isRemote) {
+        for (let i = bots.length - 1; i >= 0; i--) {
+          const bot = bots[i];
+          if (bot.userData.team === player.team) continue;
+          const botCenter = bot.position.clone();
+          botCenter.y += 1.0;
+          const dist = pos.distanceTo(botCenter);
+          if (dist <= blastRadius) {
+            const dmg = Math.round(150 * (1 - dist / (blastRadius + 1.5)));
+            if (dmg > 0) damageBot(bot, dmg, false, true);
+          }
+        }
+
+        // 敵チームのオンラインプレイヤーへの爆風ダメージ送信
+        Object.values(remotePlayers).forEach(rp => {
+          if (rp.team === player.team || rp.hp <= 0) return;
+          const rpCenter = rp.mesh.position.clone();
+          rpCenter.y += 1.0;
+          const dist = pos.distanceTo(rpCenter);
+          if (dist <= blastRadius) {
+            const dmg = Math.round(150 * (1 - dist / (blastRadius + 1.5)));
+            if (dmg > 0) {
+              sendToPeer(rp.peerId, {
+                type: 'hit_player',
+                damage: dmg,
+                isHead: false,
+                attackerName: player.name
+              });
+            }
+          }
+        });
+      }
+
+      // 自分自身が爆心地に近い場合のダメージ
+      const playerDist = pos.distanceTo(camera.position);
+      if (playerDist <= 6.5) {
+        const selfDmg = Math.round(65 * (1 - playerDist / 7.0));
+        if (selfDmg > 0) takeDamage(selfDmg);
+      }
+    }
+
+    // =========================================================================
+    // 無限に使える救急キットシステム
+    // =========================================================================
+    function startUseMedkit() {
+      if (player.isHealing || player.medkitCooldown > 0 || player.hp >= 100 || isRoundEnded) return;
+      if (player.isScoped) toggleScope(false);
+
+      player.isHealing = true;
+      player.healTimer = 1.5;
+      document.getElementById('action-progress-wrap').style.display = 'block';
+      document.getElementById('action-label').textContent = '🩺 救急キット使用中...';
+      playTone(440, 660, 'sine', 0.2, 0.2);
+      updateHUD();
+    }
+
+    function completeMedkit() {
+      player.isHealing = false;
+      player.medkitCooldown = 5.0;
+      player.hp = Math.min(100, player.hp + 50);
+      document.getElementById('action-progress-wrap').style.display = 'none';
+
+      playTone(520, 880, 'triangle', 0.28, 0.3);
+      const healFlash = document.getElementById('heal-flash');
+      healFlash.style.opacity = 1;
+      setTimeout(() => { healFlash.style.opacity = 0; }, 260);
+      updateHUD();
+    }
+
+    // =========================================================================
+    // オンラインマルチプレイ（PeerJS WebRTC 部屋コード発行＆参加）
+    // =========================================================================
+    let peer = null;
+    let isRoomHost = false;
+    let currentRoomCode = '';
+    const peerConnections = {}; // peerId -> DataConnection
+    const remotePlayers = {};   // peerId -> { peerId, name, team, hp, mesh, hpFill, upperBody, leftLeg, rightLeg }
+    const remoteHitboxes = [];  // 他プレイヤーへの射撃レイキャスト判定用メッシュ
+
+    function generateRoomCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = 'ARENA-';
+      for (let i = 0; i < 5; i++) {
+        code += chars[Math.floor(Math.random() * chars.length)];
+      }
+      return code;
+    }
+
+    function createRemotePlayerAvatar(peerId, name, team) {
+      if (remotePlayers[peerId]) return remotePlayers[peerId];
+
+      const group = new THREE.Group();
+      const upperBody = new THREE.Group();
+      group.add(upperBody);
+
+      const isAlly = team === player.team;
+      const bodyMat = new THREE.MeshStandardMaterial({
+        color: isAlly ? 0x0ea5e9 : 0xe11d48,
+        roughness: 0.35
+      });
+      const headMat = new THREE.MeshStandardMaterial({ color: 0xffedd5, roughness: 0.3 });
+      const limbMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 });
+      const visorMat = new THREE.MeshBasicMaterial({ color: isAlly ? 0x00ffcc : 0xfacc15 });
+
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.4), bodyMat);
+      torso.position.y = 1.2;
+      torso.userData = { isRemotePlayer: true, peerId, isHead: false };
+      upperBody.add(torso);
+      remoteHitboxes.push(torso);
+
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), headMat);
+      head.position.y = 1.9;
+      head.userData = { isRemotePlayer: true, peerId, isHead: true };
+      upperBody.add(head);
+      remoteHitboxes.push(head);
+
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.1, 0.05), visorMat);
+      visor.position.set(0, 1.92, 0.21);
+      upperBody.add(visor);
+
+      // 頭上のプレイヤー名＆HPバー（Canvasテクスチャ）
+      const nameCanvas = document.createElement('canvas');
+      nameCanvas.width = 256;
+      nameCanvas.height = 64;
+      const nCtx = nameCanvas.getContext('2d');
+      nCtx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+      nCtx.fillRect(18, 10, 220, 40);
+      nCtx.font = 'bold 22px sans-serif';
+      nCtx.fillStyle = isAlly ? '#38bdf8' : '#ff4655';
+      nCtx.textAlign = 'center';
+      nCtx.fillText((isAlly ? '[味方] ' : '[敵] ') + name, 128, 38);
+
+      const nameTex = new THREE.CanvasTexture(nameCanvas);
+      const namePlate = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.4, 0.35),
+        new THREE.MeshBasicMaterial({ map: nameTex, transparent: true, side: THREE.DoubleSide })
+      );
+      namePlate.position.set(0, 2.65, 0);
+      upperBody.add(namePlate);
+
+      const hpBg = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.84, 0.1),
+        new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.DoubleSide })
+      );
+      hpBg.position.set(0, 2.38, 0);
+      upperBody.add(hpBg);
+
+      const hpFill = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.8, 0.07),
+        new THREE.MeshBasicMaterial({ color: isAlly ? 0x38bdf8 : 0xff4655, side: THREE.DoubleSide })
+      );
+      hpFill.position.set(0, 2.38, 0.01);
+      upperBody.add(hpFill);
+
+      const armGeo = new THREE.BoxGeometry(0.22, 0.8, 0.22);
+      const leftArm = new THREE.Mesh(armGeo, limbMat);
+      leftArm.position.set(-0.5, 1.2, 0);
+      upperBody.add(leftArm);
+
+      const rightArm = new THREE.Mesh(armGeo, limbMat);
+      rightArm.position.set(0.5, 1.2, 0.15);
+      rightArm.rotation.x = -Math.PI / 3;
+      upperBody.add(rightArm);
+
+      const pGun = new THREE.Mesh(
+        new THREE.BoxGeometry(0.1, 0.12, 0.55),
+        new THREE.MeshBasicMaterial({ color: 0x111111 })
+      );
+      pGun.position.set(0.5, 1.35, 0.45);
+      upperBody.add(pGun);
+
+      const legGeo = new THREE.BoxGeometry(0.26, 0.75, 0.26);
+      const leftLeg = new THREE.Mesh(legGeo, limbMat);
+      leftLeg.position.set(-0.2, 0.375, 0);
+      group.add(leftLeg);
+
+      const rightLeg = new THREE.Mesh(legGeo, limbMat);
+      rightLeg.position.set(0.2, 0.375, 0);
+      group.add(rightLeg);
+
+      scene.add(group);
+      const rpObj = {
+        peerId,
+        name,
+        team,
+        hp: 100,
+        mesh: group,
+        upperBody,
+        hpFill,
+        leftLeg,
+        rightLeg,
+        lastPos: new THREE.Vector3()
+      };
+      remotePlayers[peerId] = rpObj;
+      updateOnlineHUD();
+      return rpObj;
+    }
+
+    function removeRemotePlayer(peerId) {
+      const rp = remotePlayers[peerId];
+      if (!rp) return;
+      scene.remove(rp.mesh);
+      for (let i = remoteHitboxes.length - 1; i >= 0; i--) {
+        if (remoteHitboxes[i].userData.peerId === peerId) {
+          remoteHitboxes.splice(i, 1);
+        }
+      }
+      delete remotePlayers[peerId];
+      updateOnlineHUD();
+      updateHUD();
+    }
+
+    function refreshRemotePlayerColors() {
+      // 自分のチーム切替時に既存のリモートプレイヤー色を再構築
+      const snapshot = Object.values(remotePlayers).map(rp => ({
+        peerId: rp.peerId,
+        name: rp.name,
+        team: rp.team,
+        hp: rp.hp,
+        pos: rp.mesh.position.clone()
+      }));
+      snapshot.forEach(s => {
+        removeRemotePlayer(s.peerId);
+        const created = createRemotePlayerAvatar(s.peerId, s.name, s.team);
+        created.mesh.position.copy(s.pos);
+        created.hp = s.hp;
+      });
+    }
+
+    function setupDataConnection(conn) {
+      peerConnections[conn.peer] = conn;
+
+      conn.on('open', () => {
+        // 自分のプロフィール情報を送信
+        conn.send({
+          type: 'hello',
+          name: player.name,
+          team: player.team,
+          hp: player.hp
+        });
+        updateOnlineHUD();
+      });
+
+      conn.on('data', (data) => {
+        if (!data || !data.type) return;
+
+        if (data.type === 'hello') {
+          const isNew = !remotePlayers[conn.peer];
+          const rp = createRemotePlayerAvatar(conn.peer, data.name || 'Guest', data.team || 'ally');
+          rp.hp = data.hp !== undefined ? data.hp : 100;
+          if (isNew) {
+            const relation = rp.team === player.team ? '【味方・共闘】' : '【敵・対戦】';
+            pushKillfeedMessage(`🌐 ${rp.name} が参戦しました ${relation}`, rp.team === player.team ? '#38bdf8' : '#ff4655');
+            // 相手にも自分の情報を返信
+            conn.send({
+              type: 'hello',
+              name: player.name,
+              team: player.team,
+              hp: player.hp
+            });
+          }
+          updateHUD();
+        } else if (data.type === 'state') {
+          const rp = remotePlayers[conn.peer];
+          if (rp) {
+            // 相手が途中から陣営を変えた場合は再生成
+            if (data.team && rp.team !== data.team) {
+              removeRemotePlayer(conn.peer);
+              createRemotePlayerAvatar(conn.peer, data.name || rp.name, data.team);
+            }
+            const targetRp = remotePlayers[conn.peer];
+            if (targetRp) {
+              const movedDist = Math.hypot(data.x - targetRp.mesh.position.x, data.z - targetRp.mesh.position.z);
+              targetRp.mesh.position.set(data.x, data.y, data.z);
+              targetRp.mesh.rotation.y = data.yaw + Math.PI;
+              targetRp.hp = data.hp;
+              targetRp.mesh.visible = data.hp > 0;
+
+              const ratio = Math.max(0, data.hp / 100);
+              targetRp.hpFill.scale.x = Math.max(0.001, ratio);
+              targetRp.hpFill.position.x = -0.4 * (1 - ratio);
+              targetRp.upperBody.position.y = data.crouch ? -0.35 : 0;
+
+              if (movedDist > 0.02) {
+                const swing = Math.sin(performance.now() * 0.012) * 0.45;
+                targetRp.leftLeg.rotation.x = swing;
+                targetRp.rightLeg.rotation.x = -swing;
+              } else {
+                targetRp.leftLeg.rotation.x *= 0.8;
+                targetRp.rightLeg.rotation.x *= 0.8;
+              }
+            }
+          }
+        } else if (data.type === 'shoot') {
+          const rp = remotePlayers[conn.peer];
+          const isAlly = rp ? (rp.team === player.team) : true;
+          spawnTracerBullet(
+            new THREE.Vector3(...data.start),
+            new THREE.Vector3(...data.end),
+            isAlly ? 'ally' : 'enemy'
+          );
+          playTone(220, 50, 'sawtooth', 0.1, 0.08);
+        } else if (data.type === 'hit_player') {
+          // 敵プレイヤーから撃たれてダメージを受けた
+          if (player.hp > 0 && !isRoundEnded) {
+            takeDamage(data.damage, data.attackerName);
+            if (player.hp <= 0) {
+              sendToPeer(conn.peer, {
+                type: 'player_killed',
+                victimName: player.name
+              });
+            }
+          }
+        } else if (data.type === 'player_killed') {
+          score += 300;
+          kills++;
+          updateHUD();
+          pushKillfeedMessage(`🎯 敵プレイヤー ${data.victimName} を撃破！ (+300)`, '#fbbf24');
+          playTone(1000, 1500, 'triangle', 0.2, 0.3);
+        } else if (data.type === 'grenade') {
+          throwGrenade(
+            new THREE.Vector3(...data.pos),
+            new THREE.Vector3(...data.vel),
+            true
+          );
+        }
+      });
+
+      conn.on('close', () => {
+        const rp = remotePlayers[conn.peer];
+        if (rp) {
+          pushKillfeedMessage(`🌐 ${rp.name} が退出しました`, '#94a3b8');
+        }
+        delete peerConnections[conn.peer];
+        removeRemotePlayer(conn.peer);
+      });
+    }
+
+    function sendToPeer(peerId, payload) {
+      const conn = peerConnections[peerId];
+      if (conn && conn.open) {
+        conn.send(payload);
+      }
+    }
+
+    function broadcastNetMessage(payload) {
+      Object.values(peerConnections).forEach(conn => {
+        if (conn.open) conn.send(payload);
+      });
+    }
+
+    function updateOnlineHUD() {
+      const badge = document.getElementById('online-hud-badge');
+      const totalPlayers = 1 + Object.keys(peerConnections).length;
+      if (currentRoomCode) {
+        badge.style.display = 'inline-block';
+        document.getElementById('hud-room-code').textContent = currentRoomCode;
+        document.getElementById('hud-peer-count').textContent = totalPlayers;
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    // 部屋コード発行ボタン
+    document.getElementById('btn-create-room').addEventListener('click', () => {
+      if (typeof Peer === 'undefined') {
+        document.getElementById('mp-status-text').textContent = '通信ライブラリの読み込みに失敗しました';
+        return;
+      }
+      if (peer) peer.destroy();
+
+      const code = generateRoomCode();
+      document.getElementById('mp-status-text').textContent = '部屋を作成中...';
+
+      peer = new Peer(code);
+      peer.on('open', (id) => {
+        isRoomHost = true;
+        currentRoomCode = id;
+        document.getElementById('my-room-code').textContent = id;
+        document.getElementById('btn-copy-room').style.display = 'inline-block';
+        document.getElementById('mp-status-text').textContent = `✅ 部屋を発行しました！友達に「${id}」を共有してください`;
+        document.getElementById('mp-status-text').style.color = '#00ffcc';
+        updateOnlineHUD();
+      });
+
+      peer.on('connection', (conn) => {
+        setupDataConnection(conn);
+        document.getElementById('mp-status-text').textContent = `✅ プレイヤーが部屋に接続しました！（現在 ${1 + Object.keys(peerConnections).length}人）`;
+      });
+
+      peer.on('error', (err) => {
+        document.getElementById('mp-status-text').textContent = '接続エラー: ' + err.type;
+        document.getElementById('mp-status-text').style.color = '#ff4655';
+      });
+    });
+
+    // 部屋コードコピーボタン
+    document.getElementById('btn-copy-room').addEventListener('click', () => {
+      if (!currentRoomCode) return;
+      navigator.clipboard.writeText(currentRoomCode).then(() => {
+        const btn = document.getElementById('btn-copy-room');
+        btn.textContent = 'コピー完了!';
+        setTimeout(() => { btn.textContent = 'コピー'; }, 1500);
+      });
+    });
+
+    // 部屋コード入力して参加ボタン
+    document.getElementById('btn-join-room').addEventListener('click', () => {
+      const targetCode = document.getElementById('input-join-code').value.trim().toUpperCase();
+      if (!targetCode) {
+        document.getElementById('mp-status-text').textContent = '⚠ 部屋コードを入力してください';
+        return;
+      }
+      if (typeof Peer === 'undefined') return;
+      if (peer) peer.destroy();
+
+      document.getElementById('mp-status-text').textContent = `「${targetCode}」に接続中...`;
+
+      peer = new Peer();
+      peer.on('open', () => {
+        const conn = peer.connect(targetCode, { reliable: true });
+        setupDataConnection(conn);
+
+        conn.on('open', () => {
+          isRoomHost = false;
+          currentRoomCode = targetCode;
+          document.getElementById('my-room-code').textContent = targetCode;
+          document.getElementById('mp-status-text').textContent = `✅ 部屋「${targetCode}」に参加しました！`;
+          document.getElementById('mp-status-text').style.color = '#00ffcc';
+          updateOnlineHUD();
+        });
+      });
+
+      peer.on('error', (err) => {
+        document.getElementById('mp-status-text').textContent = `❌ 部屋が見つかりません (${err.type})`;
+        document.getElementById('mp-status-text').style.color = '#ff4655';
+      });
+    });
+
+    // =========================================================================
+    // 人型キャラクター（全員 HP 100 均一・強化された敵AI）
+    // =========================================================================
+    const bots = [];
+    const botHitboxes = [];
+    const npcBullets = [];
+    const allyRoster = [];
+
+    const allySpawns5v5 = [
+      { name: 'ALLY-1 (A-Main)', pos: new THREE.Vector3(-28, 0, 32) },
+      { name: 'ALLY-2 (Mid-L)',  pos: new THREE.Vector3(-4, 0, 34) },
+      { name: 'ALLY-3 (Mid-R)',  pos: new THREE.Vector3( 4, 0, 34) },
+      { name: 'ALLY-4 (B-Site)', pos: new THREE.Vector3( 28, 0, 32) }
+    ];
+
+    const enemySpawns5v5 = [
+      new THREE.Vector3(-34, 0, -25),
+      new THREE.Vector3(-36, 2.7, -38),
+      new THREE.Vector3( 34, 0, -26),
+      new THREE.Vector3(  0, 0, -32),
+      new THREE.Vector3( 32, 0, 14)
+    ];
+
+    const soloSpawns = [
+      new THREE.Vector3(-34, 0, -25),
+      new THREE.Vector3(-36, 2.7, -38),
+      new THREE.Vector3(-34, 0, 26),
+      new THREE.Vector3(34, 0, 25),
+      new THREE.Vector3(36, 2.7, 38),
+      new THREE.Vector3(34, 0, -26),
+      new THREE.Vector3(0, 0, -28),
+      new THREE.Vector3(0, 0, 28),
+      new THREE.Vector3(-22, 0, -5),
+      new THREE.Vector3(22, 0, 5)
+    ];
+
+    function createHumanoidBot(team = 'enemy', fixedSpawn = null, unitName = '') {
+      const botGroup = new THREE.Group();
+      const upperBody = new THREE.Group();
+      botGroup.add(upperBody);
+
+      const isAlly = team === 'ally';
+      const bodyMat = new THREE.MeshStandardMaterial({
+        color: isAlly ? 0x0284c7 : 0xd90429,
+        roughness: 0.4
+      });
+      const headMat = new THREE.MeshStandardMaterial({ color: 0xffccd5, roughness: 0.3 });
+      const limbMat = new THREE.MeshStandardMaterial({ color: isAlly ? 0x1e293b : 0x2b2d42, roughness: 0.6 });
+      const visorMat = new THREE.MeshBasicMaterial({ color: isAlly ? 0x00ffcc : 0xffcc00 });
+
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.4), bodyMat);
+      torso.position.y = 1.2;
+      torso.castShadow = true;
+      torso.userData = { isHead: false, botRoot: botGroup, team };
+      upperBody.add(torso);
+      botHitboxes.push(torso);
+
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), headMat);
+      head.position.y = 1.9;
+      head.castShadow = true;
+      head.userData = { isHead: true, botRoot: botGroup, team };
+      upperBody.add(head);
+      botHitboxes.push(head);
+
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.1, 0.05), visorMat);
+      visor.position.set(0, 1.92, 0.21);
+      upperBody.add(visor);
+
+      const hpBg = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.84, 0.1),
+        new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.DoubleSide })
+      );
+      hpBg.position.set(0, 2.35, 0);
+      upperBody.add(hpBg);
+
+      const hpFill = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.8, 0.07),
+        new THREE.MeshBasicMaterial({ color: isAlly ? 0x38bdf8 : 0xff4655, side: THREE.DoubleSide })
+      );
+      hpFill.position.set(0, 2.35, 0.01);
+      upperBody.add(hpFill);
+
+      const armGeo = new THREE.BoxGeometry(0.22, 0.8, 0.22);
+      const leftArm = new THREE.Mesh(armGeo, limbMat);
+      leftArm.position.set(-0.5, 1.2, 0);
+      leftArm.userData = { isHead: false, botRoot: botGroup, team };
+      upperBody.add(leftArm);
+      botHitboxes.push(leftArm);
+
+      const rightArm = new THREE.Mesh(armGeo, limbMat);
+      rightArm.position.set(0.5, 1.2, 0.15);
+      rightArm.rotation.x = -Math.PI / 3;
+      rightArm.userData = { isHead: false, botRoot: botGroup, team };
+      upperBody.add(rightArm);
+      botHitboxes.push(rightArm);
+
+      const eGun = new THREE.Mesh(
+        new THREE.BoxGeometry(0.1, 0.12, 0.5),
+        new THREE.MeshBasicMaterial({ color: 0x111111 })
+      );
+      eGun.position.set(0.5, 1.35, 0.45);
+      upperBody.add(eGun);
+
+      const legGeo = new THREE.BoxGeometry(0.26, 0.75, 0.26);
+      const leftLeg = new THREE.Mesh(legGeo, limbMat);
+      leftLeg.position.set(-0.2, 0.375, 0);
+      leftLeg.userData = { isHead: false, botRoot: botGroup, team };
+      botGroup.add(leftLeg);
+      botHitboxes.push(leftLeg);
+
+      const rightLeg = new THREE.Mesh(legGeo, limbMat);
+      rightLeg.position.set(0.2, 0.375, 0);
+      rightLeg.userData = { isHead: false, botRoot: botGroup, team };
+      botGroup.add(rightLeg);
+      botHitboxes.push(rightLeg);
+
+      let chosenPos;
+      if (fixedSpawn) {
+        chosenPos = fixedSpawn.clone();
+      } else {
+        const candidates = soloSpawns.filter(p => p.distanceTo(camera.position) > 16);
+        chosenPos = candidates.length > 0
+          ? candidates[Math.floor(Math.random() * candidates.length)].clone()
+          : soloSpawns[0].clone();
+        chosenPos.x += (Math.random() - 0.5) * 3;
+        chosenPos.z += (Math.random() - 0.5) * 3;
+      }
+
+      botGroup.position.copy(chosenPos);
+      botGroup.userData = {
+        team,
+        name: unitName,
+        hp: 100,
+        maxHp: 100,
+        hpFill,
+        baseSpeed: isAlly ? (0.056 + Math.random() * 0.02) : (0.068 + Math.random() * 0.024),
+        strafeDir: Math.random() < 0.5 ? 1 : -1,
+        aiDecisionTimer: 0.55 + Math.random() * 1.0,
+        isCrouching: false,
+        isMoving: true,
+        flinchTimer: 0,
+        currentYaw: isAlly ? Math.PI : 0,
+        shootCooldown: isAlly ? (0.8 + Math.random() * 1.0) : (0.45 + Math.random() * 0.65),
+        burstRemaining: 0,
+        walkOffset: Math.random() * Math.PI * 2,
+        patrolTarget: isAlly
+          ? new THREE.Vector3((Math.random() - 0.5) * 50, 0, -20 - Math.random() * 15)
+          : new THREE.Vector3((Math.random() - 0.5) * 50, 0, 20 + Math.random() * 15),
+        upperBody,
+        leftLeg,
+        rightLeg,
+        leftArm
+      };
+
+      scene.add(botGroup);
+      bots.push(botGroup);
+      return botGroup;
+    }
+
+    function removeBot(bot) {
+      scene.remove(bot);
+      const idx = bots.indexOf(bot);
+      if (idx > -1) bots.splice(idx, 1);
+      for (let i = botHitboxes.length - 1; i >= 0; i--) {
+        if (botHitboxes[i].userData.botRoot === bot) {
+          botHitboxes.splice(i, 1);
+        }
+      }
+    }
+
+    // --- プレイヤー状態管理 ---
+    const player = {
+      name: defaultPlayerName,
+      team: 'ally', // 'ally' (青・共闘) | 'enemy' (赤・対戦)
+      standHeight: 1.7,
+      crouchHeight: 0.95,
+      currentEyeHeight: 1.7,
+      feetY: 0,
+      radius: 0.52,
+      standSpeed: 0.18,
+      crouchSpeed: 0.09,
+      velocityY: 0,
+      isGrounded: true,
+      isCrouching: false,
+      hp: 100,
+      ammo: 30,
+      isReloading: false,
+      isFiring: false,
+      fireCooldown: 0,
+      isScoped: false,
+      grenades: 2,
+      isHealing: false,
+      healTimer: 0,
+      medkitCooldown: 0,
+      basePitch: 0,
+      recoilPitch: 0
+    };
+
+    const SOLO_CLEAR_KILLS = 10;
+    let score = 0;
+    let kills = 0;
+    let isLocked = false;
+    let isRoundEnded = false;
+    const keys = {};
+
+    function toggleScope(forceState = null) {
+      if (selectedWeaponKey !== 'sniper') {
+        forceState = false;
+      }
+      const next = forceState !== null ? forceState : !player.isScoped;
+      player.isScoped = next;
+      document.getElementById('sniper-scope').style.display = next ? 'block' : 'none';
+      document.getElementById('crosshair').style.display = next ? 'none' : 'block';
+      gunGroup.visible = !next;
+      camera.fov = next ? 22 : settings.fov;
+      camera.updateProjectionMatrix();
+    }
+
+    // =========================================================================
+    // 豪華勝利演出（コンフェッティ紙吹雪アニメーション＆ファンファーレ）
+    // =========================================================================
+    const victoryCanvas = document.getElementById('victory-canvas');
+    const vCtx = victoryCanvas.getContext('2d');
+    let confettiParticles = [];
+    let victoryAnimActive = false;
+
+    function startVictoryCelebration() {
+      victoryCanvas.width = window.innerWidth;
+      victoryCanvas.height = window.innerHeight;
+      confettiParticles = [];
+      const colors = ['#fde047', '#00ffcc', '#38bdf8', '#ff4655', '#f472b6', '#ffffff'];
+
+      for (let i = 0; i < 160; i++) {
+        confettiParticles.push({
+          x: Math.random() * victoryCanvas.width,
+          y: Math.random() * -victoryCanvas.height,
+          w: 7 + Math.random() * 8,
+          h: 4 + Math.random() * 6,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          vx: (Math.random() - 0.5) * 3.5,
+          vy: 2.5 + Math.random() * 4.5,
+          angle: Math.random() * Math.PI * 2,
+          vAngle: (Math.random() - 0.5) * 0.18
+        });
+      }
+      victoryAnimActive = true;
+      playVictoryFanfare();
+    }
+
+    function stopVictoryCelebration() {
+      victoryAnimActive = false;
+      confettiParticles = [];
+      vCtx.clearRect(0, 0, victoryCanvas.width, victoryCanvas.height);
+      document.getElementById('lobby-box').classList.remove('victory-theme');
+      document.getElementById('overlay-title').classList.remove('victory-glow');
+    }
+
+    function updateAndDrawConfetti() {
+      if (!victoryAnimActive) return;
+      vCtx.clearRect(0, 0, victoryCanvas.width, victoryCanvas.height);
+      for (const p of confettiParticles) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.angle += p.vAngle;
+        if (p.y > victoryCanvas.height + 20) {
+          p.y = -15;
+          p.x = Math.random() * victoryCanvas.width;
+        }
+        vCtx.save();
+        vCtx.translate(p.x, p.y);
+        vCtx.rotate(p.angle);
+        vCtx.fillStyle = p.color;
+        vCtx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        vCtx.restore();
+      }
+    }
+
+    function playVictoryFanfare() {
+      if (settings.volume <= 0) return;
+      const notes = [523.25, 659.25, 783.99, 1046.50];
+      notes.forEach((freq, idx) => {
+        setTimeout(() => {
+          playTone(freq, freq * 1.02, 'triangle', 0.45, 0.25);
+        }, idx * 120);
+      });
+    }
+
+    function resetGame() {
+      activeGameMode = selectedMode;
+      player.name = document.getElementById('input-player-name').value.trim() || defaultPlayerName;
+      equipWeaponAppearance();
+      toggleScope(false);
+      stopVictoryCelebration();
+
+      bots.forEach(b => scene.remove(b));
+      bots.length = 0;
+      botHitboxes.length = 0;
+      npcBullets.forEach(b => scene.remove(b));
+      npcBullets.length = 0;
+      tracerBullets.forEach(b => scene.remove(b));
+      tracerBullets.length = 0;
+      hitSparks.forEach(s => scene.remove(s));
+      hitSparks.length = 0;
+      activeGrenades.forEach(g => scene.remove(g));
+      activeGrenades.length = 0;
+      explosionEffects.forEach(e => scene.remove(e));
+      explosionEffects.length = 0;
+      allyRoster.length = 0;
+
+      player.hp = 100;
+      player.ammo = currentWeapon.magSize;
+      player.isReloading = false;
+      player.isFiring = false;
+      player.fireCooldown = 0;
+      player.isCrouching = false;
+      player.currentEyeHeight = player.standHeight;
+      player.feetY = 0;
+      player.velocityY = 0;
+      player.isGrounded = true;
+      player.grenades = 2;
+      player.isHealing = false;
+      player.healTimer = 0;
+      player.medkitCooldown = 0;
+      player.basePitch = 0;
+      player.recoilPitch = 0;
+      document.getElementById('action-progress-wrap').style.display = 'none';
+      document.getElementById('result-banner').style.display = 'none';
+
+      score = 0;
+      kills = 0;
+      isRoundEnded = false;
+
+      const teamBoard = document.getElementById('team-scoreboard');
+      const allyListEl = document.getElementById('ally-status-list');
+      const soloGoalEl = document.getElementById('solo-goal-text');
+
+      // 自分の選択した陣営に応じたスポーン地点（allyなら南側、enemyなら北側）
+      const spawnZ = player.team === 'ally' ? 36 : -36;
+      const startYaw = player.team === 'ally' ? 0 : Math.PI;
+
+      if (activeGameMode === '5v5') {
+        camera.position.set((Math.random() - 0.5) * 6, player.standHeight, spawnZ);
+        camera.rotation.set(0, startYaw, 0);
+        teamBoard.style.display = 'flex';
+        allyListEl.style.display = 'flex';
+        soloGoalEl.style.display = 'none';
+
+        allySpawns5v5.forEach(item => {
+          const bot = createHumanoidBot('ally', item.pos, item.name);
+          allyRoster.push({ name: item.name, bot });
+        });
+        enemySpawns5v5.forEach(pos => createHumanoidBot('enemy', pos));
+      } else {
+        camera.position.set((Math.random() - 0.5) * 6, player.standHeight, player.team === 'ally' ? 26 : -26);
+        camera.rotation.set(0, startYaw, 0);
+        teamBoard.style.display = 'none';
+        allyListEl.style.display = Object.keys(remotePlayers).length > 0 ? 'flex' : 'none';
+        soloGoalEl.style.display = 'inline';
+
+        for (let i = 0; i < 6; i++) createHumanoidBot('enemy');
+      }
+
+      refreshRemotePlayerColors();
+      broadcastNetMessage({
+        type: 'hello',
+        name: player.name,
+        team: player.team,
+        hp: player.hp
+      });
+      updateHUD();
+    }
+
+    function updateHUD() {
+      document.getElementById('score').textContent = score;
+      document.getElementById('kills').textContent = kills;
+      document.getElementById('hp-text').textContent = Math.max(0, player.hp);
+      const hpBar = document.getElementById('hp-bar');
+      hpBar.style.width = Math.max(0, player.hp) + '%';
+      hpBar.style.backgroundColor = player.hp > 40 ? '#00ffcc' : '#ff3366';
+      document.getElementById('ammo').textContent = player.isReloading ? 'RELOAD' : player.ammo;
+
+      const stanceEl = document.getElementById('stance-indicator');
+      stanceEl.textContent = player.isCrouching ? 'STANCE: CROUCHING' : 'STANCE: STANDING';
+      stanceEl.style.color = player.isCrouching ? '#ffcc00' : '#00ffcc';
+
+      const medEl = document.getElementById('medkit-status');
+      if (player.isHealing) {
+        medEl.textContent = '回復中...';
+        medEl.style.color = '#ffcc00';
+      } else if (player.medkitCooldown > 0) {
+        medEl.textContent = `準備中 (${player.medkitCooldown.toFixed(1)}s)`;
+        medEl.style.color = '#94a3b8';
+      } else {
+        medEl.textContent = '∞ 使用可能';
+        medEl.style.color = '#00ffcc';
+      }
+
+      const grenEl = document.getElementById('grenade-status');
+      grenEl.textContent = `残り ${player.grenades} / 2`;
+      grenEl.style.color = player.grenades > 0 ? '#38bdf8' : '#64748b';
+
+      // オンライン味方プレイヤー＋味方NPCのHP一覧を生成
+      const onlineAllies = Object.values(remotePlayers).filter(rp => rp.team === player.team);
+      const allyListEl = document.getElementById('ally-status-list');
+
+      if (activeGameMode === '5v5' || onlineAllies.length > 0) {
+        allyListEl.style.display = 'flex';
+        let html = '';
+
+        // オンラインの人間プレイヤー（味方）を最上部に表示
+        onlineAllies.forEach(rp => {
+          const hp = Math.max(0, rp.hp);
+          const color = hp > 50 ? '#00ffcc' : (hp > 0 ? '#fbbf24' : '#ef4444');
+          const statusText = hp > 0 ? `${hp} HP` : 'DOWN';
+          html += `
+            <div class="ally-row" style="opacity: ${hp > 0 ? 1 : 0.45}">
+              <div class="ally-row-header">
+                <span>👤 ${rp.name}</span>
+                <span style="color:${color}; font-weight:bold;">${statusText}</span>
+              </div>
+              <div class="ally-mini-bar-bg">
+                <div class="ally-mini-bar-fill" style="width:${hp}%; background:${color};"></div>
+              </div>
+            </div>
+          `;
+        });
+
+        // 5v5モードの場合は味方NPCも表示
+        if (activeGameMode === '5v5') {
+          allyRoster.forEach(entry => {
+            const hp = Math.max(0, entry.bot.userData.hp);
+            const color = hp > 50 ? '#38bdf8' : (hp > 0 ? '#fbbf24' : '#ef4444');
+            const statusText = hp > 0 ? `${hp} HP` : 'K.I.A.';
+            html += `
+              <div class="ally-row" style="opacity: ${hp > 0 ? 1 : 0.45}">
+                <div class="ally-row-header">
+                  <span>${entry.name}</span>
+                  <span style="color:${color}; font-weight:bold;">${statusText}</span>
+                </div>
+                <div class="ally-mini-bar-bg">
+                  <div class="ally-mini-bar-fill" style="width:${hp}%; background:${color};"></div>
+                </div>
+              </div>
+            `;
+          });
+        }
+        allyListEl.innerHTML = html;
+      } else {
+        allyListEl.style.display = 'none';
+      }
+
+      if (activeGameMode === '5v5') {
+        const allyAlive = bots.filter(b => b.userData.team === 'ally').length +
+                          (player.team === 'ally' && player.hp > 0 ? 1 : 0) +
+                          Object.values(remotePlayers).filter(r => r.team === 'ally' && r.hp > 0).length;
+        const enemyAlive = bots.filter(b => b.userData.team === 'enemy').length +
+                           (player.team === 'enemy' && player.hp > 0 ? 1 : 0) +
+                           Object.values(remotePlayers).filter(r => r.team === 'enemy' && r.hp > 0).length;
+        document.getElementById('ally-alive').textContent = allyAlive;
+        document.getElementById('enemy-alive').textContent = enemyAlive;
+      }
+    }
+
+    function endRound(isVictory, titleText, subtitleText, descHtml) {
+      if (isRoundEnded) return;
+      isRoundEnded = true;
+      toggleScope(false);
+      document.exitPointerLock();
+      overlay.style.display = 'flex';
+
+      const lobbyBox = document.getElementById('lobby-box');
+      const title = document.getElementById('overlay-title');
+      const subtitle = document.getElementById('overlay-subtitle');
+      const banner = document.getElementById('result-banner');
+
+      subtitle.textContent = subtitleText;
+      title.textContent = titleText;
+      banner.style.display = 'block';
+      banner.innerHTML = descHtml;
+      document.getElementById('btn-play').textContent = '↻ もう一度出撃する';
+
+      if (isVictory) {
+        lobbyBox.classList.add('victory-theme');
+        title.classList.add('victory-glow');
+        subtitle.style.color = '#fde047';
+        startVictoryCelebration();
+      } else {
+        lobbyBox.classList.remove('victory-theme');
+        title.classList.remove('victory-glow');
+        title.style.color = '#ff4655';
+        subtitle.style.color = '#94a3b8';
+      }
+    }
+
+    // =========================================================================
+    // ミニマップ描画処理（味方と自分のみ表示・敵は非表示・味方HPバー付き）
+    // =========================================================================
+    const minimapCanvas = document.getElementById('minimap');
+    const mmCtx = minimapCanvas.getContext('2d');
+
+    function drawMinimap() {
+      const w = minimapCanvas.width;
+      const h = minimapCanvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const scale = w / 104;
+
+      mmCtx.clearRect(0, 0, w, h);
+
+      for (const c of colliders) {
+        if (!c.mapColor) continue;
+        const x1 = cx + c.minX * scale;
+        const z1 = cy + c.minZ * scale;
+        const bw = (c.maxX - c.minX) * scale;
+        const bd = (c.maxZ - c.minZ) * scale;
+        mmCtx.fillStyle = c.mapColor;
+        mmCtx.fillRect(x1, z1, bw, bd);
+      }
+
+      mmCtx.font = 'bold 13px sans-serif';
+      mmCtx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+      mmCtx.textAlign = 'center';
+      mmCtx.fillText('A', cx - 32 * scale, cy - 22 * scale);
+      mmCtx.fillText('B', cx + 32 * scale, cy + 22 * scale);
+      mmCtx.fillText('MID', cx, cy - 10 * scale);
+
+      mmCtx.fillStyle = '#00ff66';
+      for (const g of activeGrenades) {
+        const gx = cx + g.position.x * scale;
+        const gz = cy + g.position.z * scale;
+        mmCtx.beginPath();
+        mmCtx.arc(gx, gz, 2.5, 0, Math.PI * 2);
+        mmCtx.fill();
+      }
+
+      // 1. 味方NPCキャラクターのみ描画（敵はミニマップに表示しない）
+      for (const bot of bots) {
+        if (bot.userData.team !== player.team) continue;
+
+        const bx = cx + bot.position.x * scale;
+        const bz = cy + bot.position.z * scale;
+        const hpRatio = Math.max(0, bot.userData.hp / bot.userData.maxHp);
+
+        mmCtx.fillStyle = '#38bdf8';
+        mmCtx.beginPath();
+        mmCtx.arc(bx, bz, 4.2, 0, Math.PI * 2);
+        mmCtx.fill();
+        mmCtx.strokeStyle = '#fff';
+        mmCtx.lineWidth = 1;
+        mmCtx.stroke();
+
+        const barW = 14;
+        const barH = 2.6;
+        mmCtx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        mmCtx.fillRect(bx - barW / 2, bz + 6, barW, barH);
+        mmCtx.fillStyle = hpRatio > 0.5 ? '#38bdf8' : (hpRatio > 0.25 ? '#fbbf24' : '#ff4655');
+        mmCtx.fillRect(bx - barW / 2, bz + 6, barW * hpRatio, barH);
+      }
+
+      // 2. オンラインの味方プレイヤーを描画（敵チームのプレイヤーは非表示）
+      Object.values(remotePlayers).forEach(rp => {
+        if (rp.team !== player.team || rp.hp <= 0) return;
+
+        const rx = cx + rp.mesh.position.x * scale;
+        const rz = cy + rp.mesh.position.z * scale;
+        const hpRatio = Math.max(0, rp.hp / 100);
+
+        mmCtx.fillStyle = '#00ffcc';
+        mmCtx.beginPath();
+        mmCtx.arc(rx, rz, 4.8, 0, Math.PI * 2);
+        mmCtx.fill();
+        mmCtx.strokeStyle = '#fff';
+        mmCtx.lineWidth = 1.2;
+        mmCtx.stroke();
+
+        const barW = 16;
+        const barH = 3.0;
+        mmCtx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        mmCtx.fillRect(rx - barW / 2, rz + 6.5, barW, barH);
+        mmCtx.fillStyle = hpRatio > 0.5 ? '#00ffcc' : (hpRatio > 0.25 ? '#fbbf24' : '#ff4655');
+        mmCtx.fillRect(rx - barW / 2, rz + 6.5, barW * hpRatio, barH);
+      });
+
+      // 3. プレイヤー自身
+      const px = cx + camera.position.x * scale;
+      const pz = cy + camera.position.z * scale;
+      const forward = new THREE.Vector3();
+      camera.getWorldDirection(forward);
+      const angle = Math.atan2(forward.z, forward.x);
+
+      mmCtx.save();
+      mmCtx.translate(px, pz);
+      mmCtx.rotate(angle);
+
+      const halfFovRad = (camera.fov * Math.PI / 180) / 2;
+      mmCtx.fillStyle = 'rgba(0, 255, 204, 0.22)';
+      mmCtx.beginPath();
+      mmCtx.moveTo(0, 0);
+      mmCtx.arc(0, 0, 35, -halfFovRad, halfFovRad);
+      mmCtx.closePath();
+      mmCtx.fill();
+
+      mmCtx.fillStyle = '#00ffcc';
+      mmCtx.beginPath();
+      mmCtx.moveTo(7, 0);
+      mmCtx.lineTo(-5, -4.5);
+      mmCtx.lineTo(-2.5, 0);
+      mmCtx.lineTo(-5, 4.5);
+      mmCtx.closePath();
+      mmCtx.fill();
+
+      mmCtx.restore();
+    }
+
+    // --- サウンド効果 ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playTone(freqStart, freqEnd, type, duration, baseVol = 0.2) {
+      if (settings.volume <= 0) return;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      const finalVol = Math.max(0.001, baseVol * settings.volume);
+
+      osc.type = type;
+      osc.frequency.setValueAtTime(freqStart, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(freqEnd, audioCtx.currentTime + duration);
+      gain.gain.setValueAtTime(finalVol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+    // --- UIイベント・陣営選択・モード選択・武器選択・設定制御 ---
+    const overlay = document.getElementById('overlay');
+    const settingsModal = document.getElementById('settings-modal');
+
+    // 共闘（味方） / 対戦（敵）陣営ピル選択
+    document.getElementById('pill-ally').addEventListener('click', () => {
+      player.team = 'ally';
+      document.getElementById('pill-ally').className = 'team-pill active-ally';
+      document.getElementById('pill-enemy').className = 'team-pill';
+      refreshRemotePlayerColors();
+      broadcastNetMessage({ type: 'hello', name: player.name, team: player.team, hp: player.hp });
+    });
+
+    document.getElementById('pill-enemy').addEventListener('click', () => {
+      player.team = 'enemy';
+      document.getElementById('pill-enemy').className = 'team-pill active-enemy';
+      document.getElementById('pill-ally').className = 'team-pill';
+      refreshRemotePlayerColors();
+      broadcastNetMessage({ type: 'hello', name: player.name, team: player.team, hp: player.hp });
+    });
+
+    document.querySelectorAll('.mode-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        selectedMode = card.dataset.mode;
+        isRoundEnded = true;
+        stopVictoryCelebration();
+        document.getElementById('btn-play').textContent = '▶ 出撃する';
+      });
+    });
+
+    document.querySelectorAll('.weapon-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.weapon-card').forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        selectedWeaponKey = card.dataset.weapon;
+        isRoundEnded = true;
+        stopVictoryCelebration();
+        document.getElementById('btn-play').textContent = '▶ 出撃する';
+      });
+    });
+
+    document.getElementById('btn-play').addEventListener('click', () => {
+      if (isRoundEnded || bots.length === 0) {
+        resetGame();
+      }
+      document.body.requestPointerLock();
+    });
+
+    document.getElementById('btn-open-settings').addEventListener('click', () => {
+      settingsModal.style.display = 'flex';
+    });
+
+    document.getElementById('btn-close-settings').addEventListener('click', () => {
+      settingsModal.style.display = 'none';
+    });
+
+    document.getElementById('btn-reset-settings').addEventListener('click', () => {
+      settings = { ...defaultSettings };
+      applySettings();
+    });
+
+    document.getElementById('opt-sens').addEventListener('input', (e) => {
+      settings.sensitivity = parseFloat(e.target.value);
+      applySettings();
+    });
+    document.getElementById('opt-fov').addEventListener('input', (e) => {
+      settings.fov = parseInt(e.target.value, 10);
+      applySettings();
+    });
+    document.getElementById('opt-ch-size').addEventListener('input', (e) => {
+      settings.crosshairSize = parseInt(e.target.value, 10);
+      applySettings();
+    });
+    document.getElementById('opt-ch-color').addEventListener('change', (e) => {
+      settings.crosshairColor = e.target.value;
+      applySettings();
+    });
+    document.getElementById('opt-invert-y').addEventListener('change', (e) => {
+      settings.invertY = e.target.checked;
+      applySettings();
+    });
+    document.getElementById('opt-vol').addEventListener('input', (e) => {
+      settings.volume = parseFloat(e.target.value);
+      applySettings();
+      playTone(600, 800, 'sine', 0.08, 0.15);
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+      isLocked = document.pointerLockElement === document.body;
+      player.isFiring = false;
+      if (!isRoundEnded) {
+        overlay.style.display = isLocked ? 'none' : 'flex';
+        if (!isLocked) {
+          toggleScope(false);
+          document.getElementById('overlay-subtitle').textContent = 'GAME PAUSED';
+          document.getElementById('overlay-title').textContent = 'PAUSED';
+          document.getElementById('overlay-title').style.color = '#fff';
+          document.getElementById('btn-play').textContent = '▶ ゲームに戻る';
+        }
+      }
+    });
+
+    // --- マウス＆キーボード入力 ---
+    document.addEventListener('mousemove', (e) => {
+      if (!isLocked) return;
+      const scopeMult = player.isScoped ? 0.35 : 1.0;
+      const sensFactor = settings.sensitivity * 0.001 * scopeMult;
+      const invertSign = settings.invertY ? -1 : 1;
+
+      camera.rotation.y -= e.movementX * sensFactor;
+      const deltaPitch = -e.movementY * sensFactor * invertSign;
+
+      if (deltaPitch < 0 && player.recoilPitch > 0) {
+        const absorb = Math.min(player.recoilPitch, -deltaPitch);
+        player.recoilPitch -= absorb;
+        player.basePitch += (deltaPitch + absorb);
+      } else {
+        player.basePitch += deltaPitch;
+      }
+
+      player.basePitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.basePitch));
+    });
+
+    document.addEventListener('keydown', (e) => {
+      keys[e.code] = true;
+      if (!isLocked) return;
+
+      if (e.code === 'Space' && player.isGrounded && !player.isCrouching) {
+        player.velocityY = 0.28;
+        player.isGrounded = false;
+      }
+      if (e.code === 'KeyR' && !player.isReloading && player.ammo < currentWeapon.magSize) {
+        reloadGun();
+      }
+      if (e.code === 'KeyH' || e.code === 'Digit1') {
+        startUseMedkit();
+      }
+      if (e.code === 'KeyG' || e.code === 'Digit2') {
+        throwGrenade();
+      }
+    });
+    document.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+    function reloadGun() {
+      if (player.isReloading || player.isHealing) return;
+      toggleScope(false);
+      player.isReloading = true;
+      updateHUD();
+      playTone(300, 600, 'triangle', 0.2, 0.15);
+      gunMesh.rotation.x = -0.6;
+      setTimeout(() => {
+        player.ammo = currentWeapon.magSize;
+        player.isReloading = false;
+        gunMesh.rotation.x = 0;
+        updateHUD();
+        playTone(600, 900, 'triangle', 0.15, 0.15);
+      }, currentWeapon.reloadTime);
+    }
+
+    // --- プレイヤーの射撃処理（NPCボット ＆ オンライン敵プレイヤー両対応） ---
+    const raycaster = new THREE.Raycaster();
+
+    function firePlayerWeapon() {
+      if (!isLocked || player.isReloading || player.isHealing || player.fireCooldown > 0) return;
+
+      if (player.ammo <= 0) {
+        playTone(150, 100, 'square', 0.08, 0.15);
+        reloadGun();
+        return;
+      }
+
+      player.ammo--;
+      player.fireCooldown = currentWeapon.fireRate;
+      updateHUD();
+
+      playTone(currentWeapon.pitch[0], currentWeapon.pitch[1], 'sawtooth', 0.13, 0.22);
+
+      gunMesh.position.z = -0.42 + currentWeapon.recoilKick * 3.5;
+      player.recoilPitch = Math.min(0.28, player.recoilPitch + currentWeapon.recoilKick);
+      camera.rotation.x = Math.min(Math.PI / 2, player.basePitch + player.recoilPitch);
+
+      muzzleLight.intensity = 3.5;
+      setTimeout(() => { muzzleLight.intensity = 0; }, 50);
+
+      const muzzleStart = new THREE.Vector3();
+      muzzlePoint.getWorldPosition(muzzleStart);
+
+      const checkTargets = [...botHitboxes, ...remoteHitboxes, ...worldMeshes, floor];
+      const spreadAmount = player.isScoped ? 0.0005 : (player.isCrouching ? currentWeapon.spread * 0.65 : currentWeapon.spread);
+
+      let anyHit = false;
+      let anyHeadshot = false;
+
+      for (let p = 0; p < currentWeapon.pellets; p++) {
+        const offsetX = (Math.random() - 0.5) * spreadAmount * 2;
+        const offsetY = (Math.random() - 0.5) * spreadAmount * 2;
+        raycaster.setFromCamera(new THREE.Vector2(offsetX, offsetY), camera);
+
+        const intersects = raycaster.intersectObjects(checkTargets);
+
+        let hitPoint;
+        let hitEnemy = false;
+        if (intersects.length > 0) {
+          hitPoint = intersects[0].point;
+          const hitObj = intersects[0].object;
+
+          // 1. CPUボットへの命中（自分の陣営と異なるチームなら攻撃可能）
+          if (hitObj.userData && hitObj.userData.botRoot && hitObj.userData.team !== player.team) {
+            hitEnemy = true;
+            anyHit = true;
+            const enemy = hitObj.userData.botRoot;
+            const isHead = hitObj.userData.isHead;
+            if (isHead) anyHeadshot = true;
+            const dmg = isHead ? currentWeapon.headDamage : currentWeapon.damage;
+            damageBot(enemy, dmg, isHead, false);
+          }
+
+          // 2. オンラインの人間プレイヤーへの命中（相手が敵陣営ならダメージ送信）
+          if (hitObj.userData && hitObj.userData.isRemotePlayer) {
+            const rp = remotePlayers[hitObj.userData.peerId];
+            if (rp && rp.team !== player.team && rp.hp > 0) {
+              hitEnemy = true;
+              anyHit = true;
+              const isHead = hitObj.userData.isHead;
+              if (isHead) anyHeadshot = true;
+              const dmg = isHead ? currentWeapon.headDamage : currentWeapon.damage;
+
+              sendToPeer(rp.peerId, {
+                type: 'hit_player',
+                damage: dmg,
+                isHead,
+                attackerName: player.name
+              });
+            }
+          }
+        } else {
+          hitPoint = new THREE.Vector3();
+          raycaster.ray.at(120, hitPoint);
+        }
+
+        spawnTracerBullet(muzzleStart, hitPoint, 'player');
+        broadcastNetMessage({
+          type: 'shoot',
+          start: [muzzleStart.x, muzzleStart.y, muzzleStart.z],
+          end: [hitPoint.x, hitPoint.y, hitPoint.z]
+        });
+
+        if (intersects.length > 0) {
+          spawnHitSpark(hitPoint, hitEnemy);
+        }
+      }
+
+      if (anyHit) {
+        playTone(anyHeadshot ? 1200 : 750, anyHeadshot ? 1600 : 950, 'sine', 0.09, 0.25);
+        const hm = document.getElementById('hitmarker');
+        hm.style.opacity = 1;
+        setTimeout(() => { hm.style.opacity = 0; }, 120);
+
+        if (anyHeadshot) {
+          const hsMsg = document.getElementById('headshot-msg');
+          hsMsg.style.opacity = 1;
+          setTimeout(() => { hsMsg.style.opacity = 0; }, 450);
+        }
+      }
+
+      if (selectedWeaponKey === 'sniper' && player.isScoped) {
+        setTimeout(() => { toggleScope(false); }, 180);
+      }
+    }
+
+    document.addEventListener('mousedown', (e) => {
+      if (!isLocked) return;
+      if (e.button === 0) {
+        player.isFiring = true;
+        firePlayerWeapon();
+      } else if (e.button === 2) {
+        if (selectedWeaponKey === 'sniper' && !player.isReloading && !player.isHealing) {
+          toggleScope();
+        }
+      }
+    });
+
+    document.addEventListener('mouseup', (e) => {
+      if (e.button === 0) {
+        player.isFiring = false;
+      }
+    });
+
+    document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    function damageBot(bot, dmg, isHead, playAudio = true) {
+      if (bot.userData.hp <= 0) return;
+      bot.userData.hp = Math.max(0, bot.userData.hp - dmg);
+      bot.userData.flinchTimer = 0.16;
+      bot.userData.shootCooldown += 0.15;
+
+      const ratio = Math.max(0, bot.userData.hp / bot.userData.maxHp);
+      bot.userData.hpFill.scale.x = Math.max(0.001, ratio);
+      bot.userData.hpFill.position.x = -0.4 * (1 - ratio);
+
+      if (playAudio) {
+        playTone(isHead ? 1200 : 750, isHead ? 1600 : 950, 'sine', 0.09, 0.25);
+      }
+
+      if (bot.userData.hp <= 0) {
+        const deadTeam = bot.userData.team;
+        removeBot(bot);
+
+        if (deadTeam !== player.team) {
+          score += isHead ? 200 : 100;
+          kills++;
+
+          if (activeGameMode === 'solo') {
+            if (kills >= SOLO_CLEAR_KILLS) {
+              updateHUD();
+              endRound(
+                true,
+                'MISSION CLEAR!',
+                'SOLO / CO-OP SURVIVAL COMPLETE',
+                `目標の <b>${SOLO_CLEAR_KILLS}キル</b> を達成しました！<br>最終スコア: <b>${score}</b>`
+              );
+              return;
+            }
+            createHumanoidBot('enemy');
+          }
+        }
+
+        updateHUD();
+        checkTeamVictoryCondition();
+      } else if (bot.userData.team === player.team) {
+        updateHUD();
+      }
+    }
+
+    function checkTeamVictoryCondition() {
+      if (activeGameMode !== '5v5' || isRoundEnded) return;
+      const opposingTeam = player.team === 'ally' ? 'enemy' : 'ally';
+      const opposingBotsLeft = bots.filter(b => b.userData.team === opposingTeam).length;
+      const opposingHumansLeft = Object.values(remotePlayers).filter(r => r.team === opposingTeam && r.hp > 0).length;
+
+      if (opposingBotsLeft === 0 && opposingHumansLeft === 0) {
+        endRound(
+          true,
+          'VICTORY!',
+          '5v5 TEAM ELIMINATION',
+          `相手チームを全滅させました！<br>スコア: <b>${score}</b> &nbsp;|&nbsp; あなたの撃破数: <b>${kills}</b>`
+        );
+      }
+    }
+
+    // =========================================================================
+    // 強化されたNPC AI
+    // =========================================================================
+    const bulletGeo = new THREE.SphereGeometry(0.06, 8, 8);
+    const enemyBulletMat = new THREE.MeshBasicMaterial({ color: 0xff2244 });
+    const allyBulletMatNPC = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    const botSightRay = new THREE.Raycaster();
+
+    function hasLineOfSight(fromPos, toPos) {
+      const dir = new THREE.Vector3().subVectors(toPos, fromPos);
+      const dist = dir.length();
+      if (dist < 0.1) return true;
+      dir.normalize();
+
+      botSightRay.set(fromPos, dir);
+      botSightRay.far = dist;
+      const hits = botSightRay.intersectObjects(worldMeshes);
+      return hits.length === 0;
+    }
+
+    function findBestTargetForBot(bot) {
+      const myTeam = bot.userData.team;
+      const eyePos = bot.position.clone();
+      eyePos.y += bot.userData.isCrouching ? 1.1 : 1.55;
+
+      let bestTarget = null;
+      let bestDist = Infinity;
+
+      // 自分のチームと異なる陣営ならプレイヤーもターゲットにする
+      if (myTeam !== player.team && player.hp > 0) {
+        const pTargetPos = camera.position.clone();
+        pTargetPos.y -= 0.15;
+        const d = eyePos.distanceTo(pTargetPos);
+        if (d < bestDist && hasLineOfSight(eyePos, pTargetPos)) {
+          bestDist = d;
+          bestTarget = { type: 'player', pos: pTargetPos };
+        }
+      }
+
+      for (const other of bots) {
+        if (other.userData.team === myTeam) continue;
+        const oTargetPos = other.position.clone();
+        oTargetPos.y += other.userData.isCrouching ? 1.0 : 1.35;
+        const d = eyePos.distanceTo(oTargetPos);
+        if (d < bestDist && hasLineOfSight(eyePos, oTargetPos)) {
+          bestDist = d;
+          bestTarget = { type: 'bot', bot: other, pos: oTargetPos };
+        }
+      }
+
+      return bestTarget;
+    }
+
+    function botShoot(bot, targetPos) {
+      const isAlly = bot.userData.team === player.team;
+      const bullet = new THREE.Mesh(bulletGeo, isAlly ? allyBulletMatNPC : enemyBulletMat);
+      bullet.position.copy(bot.position);
+      bullet.position.y += bot.userData.isCrouching ? 1.05 : 1.4;
+
+      const dist = bot.position.distanceTo(targetPos);
+      const movePenalty = bot.userData.isMoving ? 1.25 : 0.65;
+      const crouchBonus = bot.userData.isCrouching ? 0.6 : 1.0;
+      const baseSpread = isAlly ? 0.042 : 0.026;
+      const spread = (baseSpread + dist * 0.0016) * movePenalty * crouchBonus;
+
+      const dir = new THREE.Vector3().subVectors(targetPos, bullet.position).normalize();
+      dir.x += (Math.random() - 0.5) * spread * 2;
+      dir.y += (Math.random() - 0.5) * spread * 1.5;
+      dir.z += (Math.random() - 0.5) * spread * 2;
+      dir.normalize();
+
+      bullet.userData = {
+        team: bot.userData.team,
+        velocity: dir.multiplyScalar(isAlly ? 0.52 : 0.64),
+        life: 200
+      };
+
+      scene.add(bullet);
+      npcBullets.push(bullet);
+      if (dist < 38) {
+        playTone(isAlly ? 440 : 380, 110, 'square', 0.09, 0.06);
+      }
+    }
+
+    function takeDamage(amount, attackerName = '') {
+      if (isRoundEnded) return;
+      player.hp = Math.max(0, player.hp - amount);
+      updateHUD();
+      playTone(110, 40, 'sawtooth', 0.25, 0.35);
+
+      const flash = document.getElementById('damage-flash');
+      flash.style.opacity = 1;
+      setTimeout(() => { flash.style.opacity = 0; }, 180);
+
+      if (player.hp <= 0) {
+        const killerInfo = attackerName ? `（撃破者: <b>${attackerName}</b>）` : '';
+        const desc = activeGameMode === '5v5'
+          ? `あなたは倒されました ${killerInfo}<br>スコア: <b>${score}</b> &nbsp;|&nbsp; 撃破数: <b>${kills}</b>`
+          : `撃破数: <b>${kills} / ${SOLO_CLEAR_KILLS}</b> ${killerInfo} &nbsp;|&nbsp; スコア: <b>${score}</b>`;
+        endRound(false, 'DEFEAT', 'YOU WERE ELIMINATED', desc);
+      }
+    }
+
+    // --- メインゲームループ ---
+    const clock = new THREE.Clock();
+    let netSyncTimer = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      const time = clock.getElapsedTime();
+
+      // オンライン位置・状態同期（約20fpsで送信）
+      netSyncTimer += delta;
+      if (netSyncTimer >= 0.05 && Object.keys(peerConnections).length > 0) {
+        netSyncTimer = 0;
+        broadcastNetMessage({
+          type: 'state',
+          name: player.name,
+          team: player.team,
+          x: camera.position.x,
+          y: player.feetY,
+          z: camera.position.z,
+          yaw: camera.rotation.y,
+          hp: player.hp,
+          crouch: player.isCrouching
+        });
+      }
+
+      if (isLocked && !isRoundEnded) {
+        if (player.fireCooldown > 0) {
+          player.fireCooldown -= delta;
+        }
+        if (player.isFiring && currentWeapon.auto && player.fireCooldown <= 0) {
+          firePlayerWeapon();
+        }
+
+        // 撃つのを止めたら視線（リコイル）が元の位置へ滑らかに戻る
+        if ((!player.isFiring || player.fireCooldown <= 0.02) && player.recoilPitch > 0) {
+          player.recoilPitch = Math.max(0, player.recoilPitch - delta * 0.24);
+        }
+        camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, player.basePitch + player.recoilPitch));
+
+        // 救急キット進行＆クールダウン
+        if (player.isHealing) {
+          player.healTimer -= delta;
+          const pct = Math.min(100, ((1.5 - player.healTimer) / 1.5) * 100);
+          document.getElementById('action-bar-fill').style.width = pct + '%';
+          if (player.healTimer <= 0) {
+            completeMedkit();
+          }
+        } else if (player.medkitCooldown > 0) {
+          player.medkitCooldown = Math.max(0, player.medkitCooldown - delta);
+          updateHUD();
+        }
+
+        // しゃがみ処理
+        const wantCrouch = !!(keys['KeyC'] || keys['ShiftLeft'] || keys['ShiftRight']);
+        if (wantCrouch !== player.isCrouching) {
+          player.isCrouching = wantCrouch;
+          updateHUD();
+        }
+
+        const targetEyeHeight = player.isCrouching ? player.crouchHeight : player.standHeight;
+        player.currentEyeHeight += (targetEyeHeight - player.currentEyeHeight) * 0.2;
+
+        const baseSpd = player.isCrouching ? player.crouchSpeed : player.standSpeed;
+        const currentSpeed = baseSpd * currentWeapon.speedMult * (player.isScoped ? 0.6 : 1.0);
+
+        const forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
+
+        const right = new THREE.Vector3();
+        right.crossVectors(forward, camera.up).normalize();
+
+        if (keys['KeyW']) camera.position.addScaledVector(forward, currentSpeed);
+        if (keys['KeyS']) camera.position.addScaledVector(forward, -currentSpeed);
+        if (keys['KeyD']) camera.position.addScaledVector(right, currentSpeed);
+        if (keys['KeyA']) camera.position.addScaledVector(right, -currentSpeed);
+
+        resolve3DCollision(camera.position, player.feetY, player.currentEyeHeight + 0.15, player.radius);
+
+        const groundY = getFloorHeightAt(camera.position.x, camera.position.z, player.feetY);
+
+        if (!player.isGrounded) {
+          player.feetY += player.velocityY;
+          player.velocityY -= 0.015;
+          if (player.feetY <= groundY) {
+            player.feetY = groundY;
+            player.velocityY = 0;
+            player.isGrounded = true;
+          }
+        } else {
+          if (player.feetY > groundY + 0.35) {
+            player.isGrounded = false;
+            player.velocityY = -0.02;
+          } else {
+            player.feetY += (groundY - player.feetY) * 0.35;
+          }
+        }
+
+        camera.position.y = player.feetY + player.currentEyeHeight;
+
+        document.getElementById('callout-badge').textContent =
+          getCalloutName(camera.position.x, camera.position.z, player.feetY);
+
+        gunMesh.position.z += (-0.42 - gunMesh.position.z) * 0.2;
+        if (!player.isReloading) {
+          const targetGunRoll = player.isCrouching ? 0.12 : 0;
+          gunMesh.rotation.z += (targetGunRoll - gunMesh.rotation.z) * 0.15;
+        }
+
+        // --- グレネード物理移動・バウンド・起爆処理 ---
+        for (let i = activeGrenades.length - 1; i >= 0; i--) {
+          const g = activeGrenades[i];
+          g.userData.fuse -= delta;
+          g.userData.velocity.y -= 0.016;
+
+          const nextPos = g.position.clone().add(g.userData.velocity);
+          const gFloor = getFloorHeightAt(nextPos.x, nextPos.z, g.position.y);
+
+          if (nextPos.y <= gFloor + 0.11) {
+            nextPos.y = gFloor + 0.11;
+            g.userData.velocity.y *= -0.45;
+            g.userData.velocity.x *= 0.72;
+            g.userData.velocity.z *= 0.72;
+          }
+
+          for (const c of colliders) {
+            if (!c.isRamp &&
+                nextPos.x >= c.minX - 0.12 && nextPos.x <= c.maxX + 0.12 &&
+                nextPos.z >= c.minZ - 0.12 && nextPos.z <= c.maxZ + 0.12 &&
+                nextPos.y >= c.minY && nextPos.y <= c.maxY) {
+              g.userData.velocity.x *= -0.5;
+              g.userData.velocity.z *= -0.5;
+              nextPos.copy(g.position);
+              break;
+            }
+          }
+
+          g.position.copy(nextPos);
+          g.rotation.x += 0.15;
+          g.rotation.z += 0.12;
+
+          if (g.userData.fuse <= 0) {
+            detonateGrenade(g.position, g.userData.isRemote);
+            scene.remove(g);
+            activeGrenades.splice(i, 1);
+          }
+        }
+
+        for (let i = explosionEffects.length - 1; i >= 0; i--) {
+          const ex = explosionEffects[i];
+          ex.userData.life--;
+          ex.scale.addScalar(0.55);
+          ex.material.opacity *= 0.86;
+          if (ex.userData.life <= 0) {
+            scene.remove(ex);
+            explosionEffects.splice(i, 1);
+          }
+        }
+
+        // --- トレーサー弾＆スパーク更新 ---
+        for (let i = tracerBullets.length - 1; i >= 0; i--) {
+          const pb = tracerBullets[i];
+          const step = pb.userData.velocity.length();
+          pb.position.add(pb.userData.velocity);
+          pb.userData.remainingDist -= step;
+          if (pb.userData.remainingDist <= 0) {
+            scene.remove(pb);
+            tracerBullets.splice(i, 1);
+          }
+        }
+
+        for (let i = hitSparks.length - 1; i >= 0; i--) {
+          const sp = hitSparks[i];
+          sp.userData.life--;
+          sp.scale.multiplyScalar(0.85);
+          if (sp.userData.life <= 0) {
+            scene.remove(sp);
+            hitSparks.splice(i, 1);
+          }
+        }
+
+        // --- 全NPC AIの更新 ---
+        bots.forEach(bot => {
+          const u = bot.userData;
+          const isEnemy = u.team !== player.team;
+          const visibleTarget = findBestTargetForBot(bot);
+
+          let focusPos;
+          if (visibleTarget) {
+            focusPos = visibleTarget.pos;
+          } else {
+            focusPos = u.patrolTarget;
+            if (bot.position.distanceTo(u.patrolTarget) < 5) {
+              u.patrolTarget.set((Math.random() - 0.5) * 65, 0, (Math.random() - 0.5) * 65);
+            }
+          }
+
+          const toFocus = new THREE.Vector3().subVectors(focusPos, bot.position);
+          toFocus.y = 0;
+          const dist = toFocus.length();
+          const forwardDir = dist > 0.01 ? toFocus.clone().normalize() : new THREE.Vector3(0, 0, 1);
+          const rightDir = new THREE.Vector3(-forwardDir.z, 0, forwardDir.x);
+
+          const turnSpeed = isEnemy ? 0.16 : 0.10;
+          const targetYaw = Math.atan2(forwardDir.x, forwardDir.z);
+          let angleDiff = targetYaw - u.currentYaw;
+          while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+          while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+          u.currentYaw += angleDiff * turnSpeed;
+          bot.rotation.y = u.currentYaw;
+
+          u.aiDecisionTimer -= delta;
+          if (u.aiDecisionTimer <= 0) {
+            u.aiDecisionTimer = isEnemy ? (0.45 + Math.random() * 0.9) : (0.7 + Math.random() * 1.2);
+            const r = Math.random();
+            if (r < 0.52) {
+              u.strafeDir *= -1;
+              u.isMoving = true;
+            } else if (r < 0.72 && visibleTarget) {
+              u.isMoving = false;
+            } else {
+              u.isMoving = true;
+            }
+            u.isCrouching = visibleTarget ? (Math.random() < 0.34) : false;
+          }
+
+          const moveVec = new THREE.Vector3();
+          if (u.isMoving && u.flinchTimer <= 0) {
+            if (!visibleTarget || dist > 15) {
+              moveVec.addScaledVector(forwardDir, 0.85);
+            } else if (dist < 7) {
+              moveVec.addScaledVector(forwardDir, -0.6);
+            }
+            moveVec.addScaledVector(rightDir, u.strafeDir * 0.85);
+          }
+
+          const speedMult = u.isCrouching ? 0.58 : 1.0;
+          if (moveVec.lengthSq() > 0.01) {
+            moveVec.normalize();
+            bot.position.addScaledVector(moveVec, u.baseSpeed * speedMult);
+            resolve3DCollision(bot.position, bot.position.y, 2.0, 0.55);
+
+            const eFloor = getFloorHeightAt(bot.position.x, bot.position.z, bot.position.y);
+            bot.position.y += (eFloor - bot.position.y) * 0.25;
+
+            const swing = Math.sin(time * 10 + u.walkOffset) * 0.45;
+            u.leftLeg.rotation.x = swing;
+            u.rightLeg.rotation.x = -swing;
+            u.leftArm.rotation.x = -swing * 0.5;
+          } else {
+            u.leftLeg.rotation.x *= 0.8;
+            u.rightLeg.rotation.x *= 0.8;
+          }
+
+          const targetBodyY = u.isCrouching ? -0.35 : 0;
+          u.upperBody.position.y += (targetBodyY - u.upperBody.position.y) * 0.18;
+
+          if (u.flinchTimer > 0) {
+            u.flinchTimer -= delta;
+            u.upperBody.rotation.x = -0.22;
+          } else {
+            u.upperBody.rotation.x += (0 - u.upperBody.rotation.x) * 0.18;
+          }
+
+          u.shootCooldown -= delta;
+          if (u.shootCooldown <= 0 && u.flinchTimer <= 0) {
+            if (visibleTarget) {
+              if (u.burstRemaining <= 0) {
+                u.burstRemaining = isEnemy ? (2 + Math.floor(Math.random() * 3)) : (1 + Math.floor(Math.random() * 3));
+              }
+              botShoot(bot, visibleTarget.pos);
+              u.burstRemaining--;
+              if (u.burstRemaining > 0) {
+                u.shootCooldown = isEnemy ? (0.13 + Math.random() * 0.06) : (0.18 + Math.random() * 0.1);
+              } else {
+                u.shootCooldown = isEnemy ? (0.75 + Math.random() * 0.85) : (1.1 + Math.random() * 1.1);
+              }
+            } else {
+              u.shootCooldown = 0.2;
+            }
+          }
+        });
+
+        // --- NPCの弾丸移動＆3D当たり判定 ---
+        for (let i = npcBullets.length - 1; i >= 0; i--) {
+          const b = npcBullets[i];
+          b.position.add(b.userData.velocity);
+          b.userData.life--;
+
+          let consumed = false;
+
+          if (b.userData.team !== player.team) {
+            const horizDist = Math.hypot(b.position.x - camera.position.x, b.position.z - camera.position.z);
+            if (horizDist < 0.5 && b.position.y >= player.feetY && b.position.y <= player.feetY + player.currentEyeHeight + 0.15) {
+              takeDamage(18);
+              consumed = true;
+            }
+          }
+
+          if (!consumed) {
+            for (const targetBot of bots) {
+              if (targetBot.userData.team === b.userData.team) continue;
+              const botH = targetBot.userData.isCrouching ? 1.65 : 2.05;
+              const dHoriz = Math.hypot(b.position.x - targetBot.position.x, b.position.z - targetBot.position.z);
+              if (dHoriz < 0.48 && b.position.y >= targetBot.position.y && b.position.y <= targetBot.position.y + botH) {
+                spawnHitSpark(b.position, true);
+                const dmgToBot = b.userData.team !== player.team ? 26 : 22;
+                damageBot(targetBot, dmgToBot, false, false);
+                consumed = true;
+                break;
+              }
+            }
+          }
+
+          if (!consumed) {
+            for (const c of colliders) {
+              if (!c.isRamp &&
+                  b.position.x >= c.minX && b.position.x <= c.maxX &&
+                  b.position.z >= c.minZ && b.position.z <= c.maxZ &&
+                  b.position.y >= c.minY && b.position.y <= c.maxY) {
+                consumed = true;
+                break;
+              }
+            }
+          }
+
+          if (consumed || b.userData.life <= 0) {
+            scene.remove(b);
+            npcBullets.splice(i, 1);
+          }
+        }
+      }
+
+      updateAndDrawConfetti();
+      drawMinimap();
+      renderer.render(scene, camera);
+    }
+
+    applySettings();
+    resetGame();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      if (victoryAnimActive) {
+        victoryCanvas.width = window.innerWidth;
+        victoryCanvas.height = window.innerHeight;
+      }
+    });
+
+    animate();
+  </script>
+</body>
+</html>
